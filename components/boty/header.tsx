@@ -48,7 +48,7 @@ export function Header() {
 
           {/* Logo */}
           <Link href="/" className="absolute left-1/2 -translate-x-1/2">
-            <h1 className="font-serif text-3xl tracking-wider text-foreground">Boty</h1>
+            <h1 className="font-serif text-3xl tracking-wider text-foreground">Dr.Oat  SkinCare</h1>
           </Link>
 
           {/* Right Actions */}
