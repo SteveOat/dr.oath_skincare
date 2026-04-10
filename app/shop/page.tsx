@@ -6,6 +6,7 @@ import Link from "next/link"
 import { ShoppingBag, SlidersHorizontal, X } from "lucide-react"
 import { Header } from "@/components/boty/header"
 import { Footer } from "@/components/boty/footer"
+import { useCart } from "@/components/boty/cart-context"
 
 const products = [
   // Serums
@@ -316,6 +317,7 @@ function ProductCard({
   isVisible: boolean
 }) {
   const [imageLoaded, setImageLoaded] = useState(false)
+  const { addItem } = useCart()
 
   return (
     <Link
@@ -364,6 +366,14 @@ function ProductCard({
             className="absolute bottom-4 right-4 w-12 h-12 rounded-full bg-background/90 backdrop-blur-sm flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 boty-transition boty-shadow"
             onClick={(e) => {
               e.preventDefault()
+              e.stopPropagation()
+              addItem({
+                id: product.id,
+                name: product.name,
+                description: product.description,
+                price: product.price,
+                image: product.image
+              })
             }}
             aria-label="Add to cart"
           >
