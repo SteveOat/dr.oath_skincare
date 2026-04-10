@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect, useContext } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ChevronLeft, Minus, Plus, ChevronDown, Leaf, Heart, Award, Recycle, Star, Check } from "lucide-react"
 import { Header } from "@/components/boty/header"
 import { Footer } from "@/components/boty/footer"
-import { CartContext } from "@/components/boty/cart-context"
+import { useCart } from "@/components/boty/cart-context"
 
 const products: Record<string, {
   id: string
@@ -94,7 +94,7 @@ export default function ProductPage() {
   const params = useParams()
   const productId = params.id as string
   const product = products[productId] || products["radiance-serum"]
-  const cartContext = useContext(CartContext)
+  const { addItem } = useCart()
 
   const [selectedSize, setSelectedSize] = useState(product.sizes[0])
   const [quantity, setQuantity] = useState(1)
@@ -110,15 +110,13 @@ export default function ProductPage() {
   }
 
   const handleAddToCart = () => {
-    if (!cartContext) return
-    
     for (let i = 0; i < quantity; i++) {
-      cartContext.addItem({
+      addItem({
         id: product.id,
         name: product.name,
+        description: product.tagline,
         price: product.price,
-        image: product.image,
-        size: selectedSize
+        image: product.image
       })
     }
     
