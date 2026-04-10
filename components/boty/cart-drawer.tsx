@@ -1,6 +1,8 @@
 "use client"
 
-import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { Minus, Plus, Trash2, ShoppingBag, Check } from "lucide-react"
 import Image from "next/image"
 import {
   Drawer,
@@ -14,10 +16,29 @@ import {
 import { useCart } from "./cart-context"
 
 export function CartDrawer() {
-  const { items, removeItem, updateQuantity, isOpen, setIsOpen, itemCount, subtotal } = useCart()
+  const router = useRouter()
+  const { items, removeItem, updateQuantity, isOpen, setIsOpen, itemCount, subtotal, clearCart } = useCart()
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false)
+  const [isPurchaseLoading, setIsPurchaseLoading] = useState(false)
 
   const shipping = 0
   const total = subtotal + shipping
+
+  const handleCheckout = () => {
+    setShowPurchaseModal(true)
+    setIsPurchaseLoading(true)
+    
+    setTimeout(() => {
+      setIsPurchaseLoading(false)
+    }, 1500)
+    
+    setTimeout(() => {
+      setShowPurchaseModal(false)
+      setIsOpen(false)
+      clearCart()
+      router.push("/shop")
+    }, 3500)
+  }
 
   return (
     <Drawer open={isOpen} onOpenChange={setIsOpen} direction="right">
@@ -125,6 +146,7 @@ export function CartDrawer() {
             {/* Checkout Button */}
             <button
               type="button"
+              onClick={handleCheckout}
               className="w-full bg-primary text-primary-foreground py-4 rounded-full font-medium hover:bg-primary/90 boty-transition"
             >
               Checkout
@@ -141,6 +163,50 @@ export function CartDrawer() {
           </DrawerFooter>
         )}
       </DrawerContent>
+
+      {/* Purchase Success Modal */}
+      {showPurchaseModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-background rounded-3xl p-8 max-w-md w-full mx-4 boty-shadow animate-in fade-in zoom-in-95 duration-300">
+            {isPurchaseLoading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6 animate-pulse">
+                  <div className="w-12 h-12 rounded-full border-3 border-primary border-t-transparent animate-spin" />
+                </div>
+                <h3 className="text-xl font-serif text-foreground mb-2">Processing Order</h3>
+                <p className="text-sm text-muted-foreground text-center">
+                  Thank you for your purchase!
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 animate-in fade-in duration-500">
+                <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mb-6 animate-bounce">
+                  <Check className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-2xl font-serif text-foreground mb-2 text-center">
+                  Order Confirmed!
+                </h3>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  Your purchase has been completed successfully. You&apos;re all set!
+                </p>
+                <div className="w-full bg-primary/10 rounded-xl p-4 mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Items</span>
+                    <span className="text-sm font-medium text-foreground">{itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total</span>
+                    <span className="text-lg font-medium text-foreground">${total}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  You will be redirected to the shop shortly...
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </Drawer>
   )
 }
