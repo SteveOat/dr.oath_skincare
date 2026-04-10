@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { ChevronLeft, Minus, Plus, ChevronDown, Leaf, Heart, Award, Recycle, Star, Check } from "lucide-react"
 import { Header } from "@/components/boty/header"
 import { Footer } from "@/components/boty/footer"
@@ -92,6 +92,7 @@ type AccordionSection = "details" | "howToUse" | "ingredients" | "delivery"
 
 export default function ProductPage() {
   const params = useParams()
+  const router = useRouter()
   const productId = params.id as string
   const product = products[productId] || products["radiance-serum"]
   const { addItem } = useCart()
@@ -100,6 +101,8 @@ export default function ProductPage() {
   const [quantity, setQuantity] = useState(1)
   const [openAccordion, setOpenAccordion] = useState<AccordionSection | null>("details")
   const [isAdded, setIsAdded] = useState(false)
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false)
+  const [isPurchaseLoading, setIsPurchaseLoading] = useState(false)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -122,6 +125,20 @@ export default function ProductPage() {
     
     setIsAdded(true)
     setTimeout(() => setIsAdded(false), 2000)
+  }
+
+  const handleBuyNow = () => {
+    setShowPurchaseModal(true)
+    setIsPurchaseLoading(true)
+    
+    setTimeout(() => {
+      setIsPurchaseLoading(false)
+    }, 1500)
+    
+    setTimeout(() => {
+      setShowPurchaseModal(false)
+      router.push("/shop")
+    }, 3500)
   }
 
   const accordionItems: { key: AccordionSection; title: string; content: string }[] = [
@@ -264,6 +281,7 @@ export default function ProductPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={handleBuyNow}
                   className="flex-1 inline-flex items-center justify-center gap-2 bg-transparent border border-foreground/20 text-foreground px-8 py-4 rounded-full text-sm tracking-wide boty-transition hover:bg-foreground/5"
                 >
                   Buy Now
@@ -317,6 +335,52 @@ export default function ProductPage() {
       </div>
 
       <Footer />
+
+      {/* Purchase Success Modal */}
+      {showPurchaseModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-3xl p-8 max-w-md w-full mx-4 boty-shadow animate-in fade-in zoom-in-95 duration-300">
+            {isPurchaseLoading ? (
+              // Loading state
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6 animate-pulse">
+                  <div className="w-12 h-12 rounded-full border-3 border-primary border-t-transparent animate-spin" />
+                </div>
+                <h3 className="text-xl font-serif text-foreground mb-2">Processing Order</h3>
+                <p className="text-sm text-muted-foreground text-center">
+                  Thank you for your purchase!
+                </p>
+              </div>
+            ) : (
+              // Success state
+              <div className="flex flex-col items-center justify-center py-8 animate-in fade-in duration-500">
+                <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mb-6 animate-bounce">
+                  <Check className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-2xl font-serif text-foreground mb-2 text-center">
+                  Order Confirmed!
+                </h3>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  Your purchase has been completed successfully. You&apos;re all set!
+                </p>
+                <div className="w-full bg-primary/10 rounded-xl p-4 mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Product</span>
+                    <span className="text-sm font-medium text-foreground">{product.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total</span>
+                    <span className="text-lg font-medium text-foreground">${product.price * quantity}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  You will be redirected to the shop shortly...
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   )
 }
