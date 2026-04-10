@@ -31,7 +31,7 @@ export function Newsletter() {
           {isSubscribed ? (
             <div className="inline-flex items-center gap-3 bg-primary-foreground/10 backdrop-blur-sm rounded-full px-8 py-4">
               <Check className="w-5 h-5 text-primary-foreground" />
-              <span className="text-primary-foreground">Welcome to the Boty family!</span>
+              <span className="text-primary-foreground">Welcome to the Dr.Oat SkinCare family!</span>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">

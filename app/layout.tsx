@@ -18,8 +18,8 @@ const playfairDisplay = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: 'Boty — Natural Skincare',
-  description: 'Premium natural skincare and body care products. Glow gently with Boty.',
+  title: 'Dr.Oat SkinCare — Natural Skincare',
+  description: 'Premium natural skincare and body care products. Glow gently with Dr.Oat SkinCare.',
   generator: 'v0.app',
   keywords: ['skincare', 'natural', 'organic', 'beauty', 'body care', 'cruelty-free'],
   icons: {

@@ -17,7 +17,7 @@ const testimonials = [
     name: "Emma L.",
     location: "Los Angeles",
     rating: 5,
-    text: "Finally, skincare that actually feels natural. No more harsh chemicals. My sensitive skin loves Boty products.",
+    text: "Finally, skincare that actually feels natural. No more harsh chemicals. My sensitive skin loves Dr.Oat SkinCare products.",
     product: "Gentle Cleanser"
   },
   {
@@ -33,7 +33,7 @@ const testimonials = [
     name: "Maria K.",
     location: "Miami",
     rating: 5,
-    text: "I've tried countless serums but nothing compares to the glow I get from Boty. Absolutely transformative.",
+    text: "I've tried countless serums but nothing compares to the glow I get from Dr.Oat SkinCare. Absolutely transformative.",
     product: "Glow Serum"
   },
   {
@@ -49,7 +49,7 @@ const testimonials = [
     name: "Anna P.",
     location: "Boston",
     rating: 5,
-    text: "My acne-prone skin has cleared up since switching to Boty. Natural ingredients really make a difference.",
+    text: "My acne-prone skin has cleared up since switching to Dr.Oat SkinCare. Natural ingredients really make a difference.",
     product: "Gentle Cleanser"
   },
   {
@@ -65,7 +65,7 @@ const testimonials = [
     name: "Lily W.",
     location: "Portland",
     rating: 5,
-    text: "I love that Boty is cruelty-free and vegan. Great products that align with my values.",
+    text: "I love that Dr.Oat SkinCare is cruelty-free and vegan. Great products that align with my values.",
     product: "Hydra Cream"
   },
   {
