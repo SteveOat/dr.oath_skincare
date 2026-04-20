@@ -352,8 +352,12 @@ export default function AdminDashboard() {
     ? ((data.cartConversion.purchased / data.cartConversion.added) * 100).toFixed(1) 
     : "0"
 
-  // Category breakdown for pie chart
-  const categoryData = data?.productAnalytics?.reduce((acc, p) => {
+  // Category breakdown for pie chart - use mock data if productAnalytics is empty
+  const productAnalyticsData = (data?.productAnalytics && data.productAnalytics.length > 0) 
+    ? data.productAnalytics 
+    : MOCK_DATA.productAnalytics
+  
+  const categoryData = productAnalyticsData?.reduce((acc, p) => {
     const existing = acc.find(c => c.name === p.product_category)
     if (existing) {
       existing.value += p.revenue
