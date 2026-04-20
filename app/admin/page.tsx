@@ -17,7 +17,8 @@ import {
 } from "recharts"
 import { createClient } from "@/lib/supabase/client"
 import { 
-  TrendingUp, 
+  TrendingUp,
+  TrendingDown, 
   Eye, 
   ShoppingCart, 
   DollarSign, 
@@ -136,7 +137,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
-  const [activeTab, setActiveTab] = useState<"overview" | "products">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "products" | "competitors">("overview")
 
   const fetchAnalytics = async () => {
     setLoading(true)
@@ -416,6 +417,22 @@ export default function AdminDashboard() {
               }`}
             >
               Products & Inventory
+            </button>
+            <button
+              onClick={() => setActiveTab("competitors")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "competitors"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                Competitor Analysis
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+              </span>
             </button>
           </div>
         </div>
@@ -738,7 +755,278 @@ export default function AdminDashboard() {
               )}
             </div>
           </>
-        )}
+        ) : activeTab === "competitors" ? (
+          <>
+            {/* Competitor Analysis Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-serif text-foreground">Competitor Intelligence</h2>
+                <p className="text-sm text-muted-foreground mt-1">Real-time monitoring of competitor pricing and activity</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                  <span className="text-xs font-medium text-green-700">Live Monitoring</span>
+                </div>
+                <span className="text-xs text-muted-foreground">Updated: {new Date().toLocaleTimeString()}</span>
+              </div>
+            </div>
+
+            {/* Competitor Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="bg-card rounded-2xl p-5 border border-border/50">
+                <div className="flex items-center justify-between mb-2">
+                  <Eye className="w-5 h-5 text-primary" />
+                  <span className="text-xs text-green-600">Live</span>
+                </div>
+                <p className="text-2xl font-semibold text-foreground">5</p>
+                <p className="text-xs text-muted-foreground mt-1">Competitors Tracked</p>
+              </div>
+              <div className="bg-card rounded-2xl p-5 border border-border/50">
+                <div className="flex items-center justify-between mb-2">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  <span className="text-xs text-amber-600">+3 today</span>
+                </div>
+                <p className="text-2xl font-semibold text-foreground">12</p>
+                <p className="text-xs text-muted-foreground mt-1">Price Changes (7d)</p>
+              </div>
+              <div className="bg-card rounded-2xl p-5 border border-border/50">
+                <div className="flex items-center justify-between mb-2">
+                  <Package className="w-5 h-5 text-primary" />
+                  <span className="text-xs text-green-600">Advantage</span>
+                </div>
+                <p className="text-2xl font-semibold text-foreground">68%</p>
+                <p className="text-xs text-muted-foreground mt-1">Price Competitiveness</p>
+              </div>
+              <div className="bg-card rounded-2xl p-5 border border-border/50">
+                <div className="flex items-center justify-between mb-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                </div>
+                <p className="text-2xl font-semibold text-foreground">2</p>
+                <p className="text-xs text-muted-foreground mt-1">Price Alerts</p>
+              </div>
+            </div>
+
+            {/* Competitors Grid */}
+            <div className="grid lg:grid-cols-2 gap-6 mb-8">
+              {/* Competitor Cards */}
+              {[
+                { 
+                  name: "GlowNaturals", 
+                  logo: "GN", 
+                  status: "active",
+                  lastScan: "2 min ago",
+                  avgPrice: 72.50,
+                  priceChange: -5.2,
+                  products: 24,
+                  marketShare: 18,
+                  threat: "medium",
+                  recentActivity: "Launched new vitamin C serum at $65"
+                },
+                { 
+                  name: "PureSkin Co.", 
+                  logo: "PS", 
+                  status: "active",
+                  lastScan: "5 min ago",
+                  avgPrice: 85.00,
+                  priceChange: 2.1,
+                  products: 31,
+                  marketShare: 22,
+                  threat: "high",
+                  recentActivity: "Running 20% off promotion on moisturizers"
+                },
+                { 
+                  name: "Botanica Beauty", 
+                  logo: "BB", 
+                  status: "active",
+                  lastScan: "8 min ago",
+                  avgPrice: 68.25,
+                  priceChange: 0,
+                  products: 18,
+                  marketShare: 12,
+                  threat: "low",
+                  recentActivity: "No significant changes detected"
+                },
+                { 
+                  name: "Derma Essentials", 
+                  logo: "DE", 
+                  status: "active",
+                  lastScan: "12 min ago",
+                  avgPrice: 92.00,
+                  priceChange: 8.5,
+                  products: 42,
+                  marketShare: 28,
+                  threat: "high",
+                  recentActivity: "Added 5 new anti-aging products"
+                },
+                { 
+                  name: "NatureGlow Labs", 
+                  logo: "NL", 
+                  status: "monitoring",
+                  lastScan: "15 min ago",
+                  avgPrice: 55.75,
+                  priceChange: -12.3,
+                  products: 15,
+                  marketShare: 8,
+                  threat: "medium",
+                  recentActivity: "Aggressive price cuts across all serums"
+                }
+              ].map((competitor) => (
+                <div key={competitor.name} className="bg-card rounded-2xl p-6 border border-border/50">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center font-serif font-bold text-primary">
+                        {competitor.logo}
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-foreground">{competitor.name}</h3>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${competitor.status === 'active' ? 'bg-green-400' : 'bg-amber-400'} opacity-75`}></span>
+                            <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${competitor.status === 'active' ? 'bg-green-500' : 'bg-amber-500'}`}></span>
+                          </span>
+                          <span className="text-xs text-muted-foreground">Scanned {competitor.lastScan}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      competitor.threat === 'high' ? 'bg-red-100 text-red-700' :
+                      competitor.threat === 'medium' ? 'bg-amber-100 text-amber-700' :
+                      'bg-green-100 text-green-700'
+                    }`}>
+                      {competitor.threat === 'high' ? 'High Threat' : competitor.threat === 'medium' ? 'Watch' : 'Low Risk'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-4 mb-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Avg. Price</p>
+                      <p className="text-sm font-semibold text-foreground">${competitor.avgPrice.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Change (7d)</p>
+                      <p className={`text-sm font-semibold ${competitor.priceChange > 0 ? 'text-red-600' : competitor.priceChange < 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                        {competitor.priceChange > 0 ? '+' : ''}{competitor.priceChange}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Products</p>
+                      <p className="text-sm font-semibold text-foreground">{competitor.products}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Market Share</p>
+                      <p className="text-sm font-semibold text-foreground">{competitor.marketShare}%</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground mb-1">Latest Activity</p>
+                    <p className="text-sm text-foreground">{competitor.recentActivity}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Price Comparison Table */}
+            <div className="bg-card rounded-2xl border border-border/50">
+              <div className="p-6 border-b border-border/50">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-serif text-lg text-foreground">Product Price Comparison</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">Auto-refreshing</span>
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border/50">
+                      <th className="text-left py-3 px-6 text-xs font-medium text-muted-foreground uppercase tracking-wider">Product</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Our Price</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">GlowNaturals</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">PureSkin</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Botanica</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Derma Ess.</th>
+                      <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">Position</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { name: "Vitamin C Serum", ourPrice: 78, competitors: [65, 82, 70, 95], position: 3 },
+                      { name: "Hydrating Moisturizer", ourPrice: 67, competitors: [72, 68, 65, 85], position: 2 },
+                      { name: "Gentle Cleanser", ourPrice: 45, competitors: [48, 52, 42, 55], position: 2 },
+                      { name: "Renewal Night Oil", ourPrice: 95, competitors: [88, 110, 82, 125], position: 3 },
+                      { name: "Anti-Aging Eye Serum", ourPrice: 98, competitors: [105, 92, 89, 115], position: 3 },
+                      { name: "Clay Face Mask", ourPrice: 52, competitors: [55, 48, 50, 62], position: 2 },
+                    ].map((product, idx) => (
+                      <tr key={product.name} className="border-b border-border/30 hover:bg-muted/30 transition-colors">
+                        <td className="py-4 px-6 text-sm font-medium text-foreground">{product.name}</td>
+                        <td className="py-4 px-4 text-center">
+                          <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-semibold">
+                            ${product.ourPrice}
+                          </span>
+                        </td>
+                        {product.competitors.map((price, i) => (
+                          <td key={i} className="py-4 px-4 text-center text-sm">
+                            <span className={price < product.ourPrice ? 'text-red-600 font-medium' : price > product.ourPrice ? 'text-green-600' : 'text-muted-foreground'}>
+                              ${price}
+                              {price < product.ourPrice && <TrendingDown className="inline w-3 h-3 ml-1" />}
+                              {price > product.ourPrice && <TrendingUp className="inline w-3 h-3 ml-1" />}
+                            </span>
+                          </td>
+                        ))}
+                        <td className="py-4 px-4 text-center">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            product.position === 1 ? 'bg-green-100 text-green-700' :
+                            product.position === 2 ? 'bg-blue-100 text-blue-700' :
+                            product.position <= 3 ? 'bg-amber-100 text-amber-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            #{product.position} of 5
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Recent Alerts */}
+            <div className="mt-8 bg-card rounded-2xl border border-border/50 p-6">
+              <h3 className="font-serif text-lg text-foreground mb-4">Recent Competitor Alerts</h3>
+              <div className="space-y-3">
+                {[
+                  { time: "10 min ago", type: "price", message: "NatureGlow Labs dropped serum prices by 12%", severity: "warning" },
+                  { time: "2 hours ago", type: "product", message: "PureSkin Co. launched new moisturizer line", severity: "info" },
+                  { time: "5 hours ago", type: "promo", message: "Derma Essentials started 25% off sale", severity: "warning" },
+                  { time: "1 day ago", type: "stock", message: "GlowNaturals vitamin C serum out of stock", severity: "success" },
+                ].map((alert, i) => (
+                  <div key={i} className={`flex items-center gap-4 p-3 rounded-lg ${
+                    alert.severity === 'warning' ? 'bg-amber-50 border border-amber-200' :
+                    alert.severity === 'success' ? 'bg-green-50 border border-green-200' :
+                    'bg-blue-50 border border-blue-200'
+                  }`}>
+                    <div className={`w-2 h-2 rounded-full ${
+                      alert.severity === 'warning' ? 'bg-amber-500' :
+                      alert.severity === 'success' ? 'bg-green-500' :
+                      'bg-blue-500'
+                    }`} />
+                    <p className="text-sm text-foreground flex-1">{alert.message}</p>
+                    <span className="text-xs text-muted-foreground">{alert.time}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : null}
       </main>
     </div>
   )
