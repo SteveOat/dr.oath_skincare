@@ -293,13 +293,38 @@ export default function AdminDashboard() {
     fetchAnalytics()
   }, [])
 
-  // If data is empty or has no meaningful values, use mock data
+  // Merge real data with mock data for empty sections
   useEffect(() => {
-    if (data && data.totalPageViews === 0 && data.totalSessions === 0 && data.productAnalytics.length === 0) {
-      setData(MOCK_DATA)
-      setUseMockData(true)
+    if (data) {
+      const needsMockData = 
+        data.topProducts.length === 0 ||
+        data.recentPurchases.length === 0 ||
+        data.productAnalytics.length === 0 ||
+        data.totalRevenue === 0
+
+      if (needsMockData) {
+        setData({
+          // Use real data if available, otherwise mock
+          totalSessions: data.totalSessions > 0 ? data.totalSessions : MOCK_DATA.totalSessions,
+          totalPageViews: data.totalPageViews > 0 ? data.totalPageViews : MOCK_DATA.totalPageViews,
+          totalProductViews: data.totalProductViews > 0 ? data.totalProductViews : MOCK_DATA.totalProductViews,
+          totalCartEvents: data.totalCartEvents > 0 ? data.totalCartEvents : MOCK_DATA.totalCartEvents,
+          totalPurchases: data.totalPurchases > 0 ? data.totalPurchases : MOCK_DATA.totalPurchases,
+          totalRevenue: data.totalRevenue > 0 ? data.totalRevenue : MOCK_DATA.totalRevenue,
+          // For arrays, use mock if empty
+          pageViewsByPath: data.pageViewsByPath.length > 0 ? data.pageViewsByPath : MOCK_DATA.pageViewsByPath,
+          topProducts: data.topProducts.length > 0 ? data.topProducts : MOCK_DATA.topProducts,
+          recentPurchases: data.recentPurchases.length > 0 ? data.recentPurchases : MOCK_DATA.recentPurchases,
+          dailyPageViews: data.dailyPageViews.length > 0 ? data.dailyPageViews : MOCK_DATA.dailyPageViews,
+          cartConversion: data.cartConversion.added > 0 ? data.cartConversion : MOCK_DATA.cartConversion,
+          productAnalytics: data.productAnalytics.length > 0 ? data.productAnalytics : MOCK_DATA.productAnalytics,
+          totalStock: data.totalStock > 0 ? data.totalStock : MOCK_DATA.totalStock,
+          lowStockCount: data.productAnalytics.length > 0 ? data.lowStockCount : MOCK_DATA.lowStockCount
+        })
+        setUseMockData(true)
+      }
     }
-  }, [data])
+  }, [data?.topProducts?.length, data?.recentPurchases?.length, data?.productAnalytics?.length, data?.totalRevenue])
 
   if (loading) {
     return (
