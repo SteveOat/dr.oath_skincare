@@ -348,16 +348,20 @@ export default function AdminDashboard() {
     { label: "Revenue", value: `$${data?.totalRevenue?.toFixed(2) || "0.00"}`, icon: DollarSign, change: 18 }
   ]
 
-  const conversionRate = data?.cartConversion?.added 
-    ? ((data.cartConversion.purchased / data.cartConversion.added) * 100).toFixed(1) 
+  // Use mock cart conversion data if empty
+  const cartConversionForCalc = (!data || !data.cartConversion || data.cartConversion.added === 0) 
+    ? MOCK_DATA.cartConversion 
+    : data.cartConversion
+  const conversionRate = cartConversionForCalc.added 
+    ? ((cartConversionForCalc.purchased / cartConversionForCalc.added) * 100).toFixed(1) 
     : "0"
 
-  // Category breakdown for pie chart - use mock data if productAnalytics is empty
-  const productAnalyticsData = (data?.productAnalytics && data.productAnalytics.length > 0) 
-    ? data.productAnalytics 
-    : MOCK_DATA.productAnalytics
+  // Category breakdown for pie chart - use mock data if productAnalytics is empty or data is null
+  const productAnalyticsData = (!data || !data.productAnalytics || data.productAnalytics.length === 0) 
+    ? MOCK_DATA.productAnalytics 
+    : data.productAnalytics
   
-  const categoryData = productAnalyticsData?.reduce((acc, p) => {
+  const categoryData = productAnalyticsData.reduce((acc, p) => {
     const existing = acc.find(c => c.name === p.product_category)
     if (existing) {
       existing.value += p.revenue
@@ -366,7 +370,20 @@ export default function AdminDashboard() {
       acc.push({ name: p.product_category, value: p.revenue, stock: p.stock_quantity })
     }
     return acc
-  }, [] as { name: string; value: number; stock: number }[]) || []
+  }, [] as { name: string; value: number; stock: number }[])
+  
+  // Also ensure topProducts and recentPurchases use mock data when empty
+  const topProductsData = (!data || !data.topProducts || data.topProducts.length === 0) 
+    ? MOCK_DATA.topProducts 
+    : data.topProducts
+    
+  const recentPurchasesData = (!data || !data.recentPurchases || data.recentPurchases.length === 0) 
+    ? MOCK_DATA.recentPurchases 
+    : data.recentPurchases
+    
+  const cartConversionData = (!data || !data.cartConversion || data.cartConversion.added === 0) 
+    ? MOCK_DATA.cartConversion 
+    : data.cartConversion
 
   return (
     <div className="min-h-screen bg-background">
@@ -540,21 +557,17 @@ export default function AdminDashboard() {
               <div className="bg-card rounded-2xl p-6 border border-border/50">
                 <h3 className="font-serif text-lg text-foreground mb-4">Top Products</h3>
                 <div className="space-y-3">
-                  {(data?.topProducts || []).length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No product views yet</p>
-                  ) : (
-                    data?.topProducts.map((product, i) => (
-                      <div key={product.name} className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">
-                            {i + 1}
-                          </span>
-                          <span className="text-sm text-foreground truncate max-w-[150px]">{product.name}</span>
-                        </div>
-                        <span className="text-sm text-muted-foreground">{product.views} views</span>
+                  {topProductsData.map((product, i) => (
+                    <div key={product.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">
+                          {i + 1}
+                        </span>
+                        <span className="text-sm text-foreground truncate max-w-[150px]">{product.name}</span>
                       </div>
-                    ))
-                  )}
+                      <span className="text-sm text-muted-foreground">{product.views} views</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -567,11 +580,11 @@ export default function AdminDashboard() {
                     <p className="text-sm text-muted-foreground mt-2">of cart additions converted</p>
                     <div className="flex justify-center gap-6 mt-4 text-sm">
                       <div>
-                        <p className="font-medium text-foreground">{data?.cartConversion?.added || 0}</p>
+                        <p className="font-medium text-foreground">{cartConversionData.added}</p>
                         <p className="text-muted-foreground">Added</p>
                       </div>
                       <div>
-                        <p className="font-medium text-foreground">{data?.cartConversion?.purchased || 0}</p>
+                        <p className="font-medium text-foreground">{cartConversionData.purchased}</p>
                         <p className="text-muted-foreground">Purchased</p>
                       </div>
                     </div>
@@ -583,21 +596,17 @@ export default function AdminDashboard() {
               <div className="bg-card rounded-2xl p-6 border border-border/50">
                 <h3 className="font-serif text-lg text-foreground mb-4">Recent Purchases</h3>
                 <div className="space-y-3">
-                  {(data?.recentPurchases || []).length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No purchases yet</p>
-                  ) : (
-                    data?.recentPurchases.slice(0, 5).map((purchase) => (
-                      <div key={purchase.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">${purchase.total}</p>
-                          <p className="text-xs text-muted-foreground">{purchase.items} items</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(purchase.created_at).toLocaleDateString()}
-                        </span>
+                  {recentPurchasesData.slice(0, 5).map((purchase) => (
+                    <div key={purchase.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">${purchase.total}</p>
+                        <p className="text-xs text-muted-foreground">{purchase.items} items</p>
                       </div>
-                    ))
-                  )}
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(purchase.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
