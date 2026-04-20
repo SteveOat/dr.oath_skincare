@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { AnalyticsChatbot } from "@/components/analytics-chatbot"
 import { 
   BarChart, 
   Bar, 
@@ -1028,6 +1029,9 @@ export default function AdminDashboard() {
           </>
         ) : null}
       </main>
+      
+      {/* AI Analytics Chatbot */}
+      <AnalyticsChatbot />
     </div>
   )
 }
