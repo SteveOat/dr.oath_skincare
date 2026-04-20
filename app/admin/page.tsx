@@ -137,7 +137,6 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [activeTab, setActiveTab] = useState<"overview" | "products">("overview")
-  const [useMockData, setUseMockData] = useState(false)
 
   const fetchAnalytics = async () => {
     setLoading(true)
@@ -281,8 +280,7 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error("Failed to fetch analytics:", err)
       // Use mock data instead of showing error
-      setData(MOCK_DATA)
-      setUseMockData(true)
+      setData(null)
       setError(null)
     } finally {
       setLoading(false)
@@ -293,38 +291,31 @@ export default function AdminDashboard() {
     fetchAnalytics()
   }, [])
 
-  // Merge real data with mock data for empty sections
-  useEffect(() => {
-    if (data) {
-      const needsMockData = 
-        data.topProducts.length === 0 ||
-        data.recentPurchases.length === 0 ||
-        data.productAnalytics.length === 0 ||
-        data.totalRevenue === 0
-
-      if (needsMockData) {
-        setData({
-          // Use real data if available, otherwise mock
-          totalSessions: data.totalSessions > 0 ? data.totalSessions : MOCK_DATA.totalSessions,
-          totalPageViews: data.totalPageViews > 0 ? data.totalPageViews : MOCK_DATA.totalPageViews,
-          totalProductViews: data.totalProductViews > 0 ? data.totalProductViews : MOCK_DATA.totalProductViews,
-          totalCartEvents: data.totalCartEvents > 0 ? data.totalCartEvents : MOCK_DATA.totalCartEvents,
-          totalPurchases: data.totalPurchases > 0 ? data.totalPurchases : MOCK_DATA.totalPurchases,
-          totalRevenue: data.totalRevenue > 0 ? data.totalRevenue : MOCK_DATA.totalRevenue,
-          // For arrays, use mock if empty
-          pageViewsByPath: data.pageViewsByPath.length > 0 ? data.pageViewsByPath : MOCK_DATA.pageViewsByPath,
-          topProducts: data.topProducts.length > 0 ? data.topProducts : MOCK_DATA.topProducts,
-          recentPurchases: data.recentPurchases.length > 0 ? data.recentPurchases : MOCK_DATA.recentPurchases,
-          dailyPageViews: data.dailyPageViews.length > 0 ? data.dailyPageViews : MOCK_DATA.dailyPageViews,
-          cartConversion: data.cartConversion.added > 0 ? data.cartConversion : MOCK_DATA.cartConversion,
-          productAnalytics: data.productAnalytics.length > 0 ? data.productAnalytics : MOCK_DATA.productAnalytics,
-          totalStock: data.totalStock > 0 ? data.totalStock : MOCK_DATA.totalStock,
-          lowStockCount: data.productAnalytics.length > 0 ? data.lowStockCount : MOCK_DATA.lowStockCount
-        })
-        setUseMockData(true)
-      }
-    }
-  }, [data?.topProducts?.length, data?.recentPurchases?.length, data?.productAnalytics?.length, data?.totalRevenue])
+  // Create stable display data by merging real data with mock data for empty sections
+  // This is computed on every render but doesn't trigger re-renders
+  const displayData: AnalyticsData = data ? {
+    totalSessions: data.totalSessions > 0 ? data.totalSessions : MOCK_DATA.totalSessions,
+    totalPageViews: data.totalPageViews > 0 ? data.totalPageViews : MOCK_DATA.totalPageViews,
+    totalProductViews: data.totalProductViews > 0 ? data.totalProductViews : MOCK_DATA.totalProductViews,
+    totalCartEvents: data.totalCartEvents > 0 ? data.totalCartEvents : MOCK_DATA.totalCartEvents,
+    totalPurchases: data.totalPurchases > 0 ? data.totalPurchases : MOCK_DATA.totalPurchases,
+    totalRevenue: data.totalRevenue > 0 ? data.totalRevenue : MOCK_DATA.totalRevenue,
+    pageViewsByPath: data.pageViewsByPath.length > 0 ? data.pageViewsByPath : MOCK_DATA.pageViewsByPath,
+    topProducts: data.topProducts.length > 0 ? data.topProducts : MOCK_DATA.topProducts,
+    recentPurchases: data.recentPurchases.length > 0 ? data.recentPurchases : MOCK_DATA.recentPurchases,
+    dailyPageViews: data.dailyPageViews.length > 0 ? data.dailyPageViews : MOCK_DATA.dailyPageViews,
+    cartConversion: data.cartConversion.added > 0 ? data.cartConversion : MOCK_DATA.cartConversion,
+    productAnalytics: data.productAnalytics.length > 0 ? data.productAnalytics : MOCK_DATA.productAnalytics,
+    totalStock: data.totalStock > 0 ? data.totalStock : MOCK_DATA.totalStock,
+    lowStockCount: data.productAnalytics.length > 0 ? data.lowStockCount : MOCK_DATA.lowStockCount
+  } : MOCK_DATA
+  
+  // Check if we're using any mock data
+  const isUsingMockData = !data || 
+    data.topProducts.length === 0 || 
+    data.recentPurchases.length === 0 || 
+    data.productAnalytics.length === 0 || 
+    data.totalRevenue === 0
 
   if (loading) {
     return (
@@ -340,28 +331,21 @@ export default function AdminDashboard() {
   
 
   const stats = [
-    { label: "Total Sessions", value: data?.totalSessions || 0, icon: Users, change: 12 },
-    { label: "Page Views", value: data?.totalPageViews || 0, icon: Eye, change: 8 },
-    { label: "Product Views", value: data?.totalProductViews || 0, icon: Package, change: 15 },
-    { label: "Cart Adds", value: data?.totalCartEvents || 0, icon: ShoppingCart, change: 5 },
-    { label: "Purchases", value: data?.totalPurchases || 0, icon: MousePointer, change: 20 },
-    { label: "Revenue", value: `$${data?.totalRevenue?.toFixed(2) || "0.00"}`, icon: DollarSign, change: 18 }
+    { label: "Total Sessions", value: displayData.totalSessions, icon: Users, change: 12 },
+    { label: "Page Views", value: displayData.totalPageViews, icon: Eye, change: 8 },
+    { label: "Product Views", value: displayData.totalProductViews, icon: Package, change: 15 },
+    { label: "Cart Adds", value: displayData.totalCartEvents, icon: ShoppingCart, change: 5 },
+    { label: "Purchases", value: displayData.totalPurchases, icon: MousePointer, change: 20 },
+    { label: "Revenue", value: `$${displayData.totalRevenue.toFixed(2)}`, icon: DollarSign, change: 18 }
   ]
 
-  // Use mock cart conversion data if empty
-  const cartConversionForCalc = (!data || !data.cartConversion || data.cartConversion.added === 0) 
-    ? MOCK_DATA.cartConversion 
-    : data.cartConversion
-  const conversionRate = cartConversionForCalc.added 
-    ? ((cartConversionForCalc.purchased / cartConversionForCalc.added) * 100).toFixed(1) 
+  // Derived data from displayData (stable)
+  const conversionRate = displayData.cartConversion.added 
+    ? ((displayData.cartConversion.purchased / displayData.cartConversion.added) * 100).toFixed(1) 
     : "0"
 
-  // Category breakdown for pie chart - use mock data if productAnalytics is empty or data is null
-  const productAnalyticsData = (!data || !data.productAnalytics || data.productAnalytics.length === 0) 
-    ? MOCK_DATA.productAnalytics 
-    : data.productAnalytics
-  
-  const categoryData = productAnalyticsData.reduce((acc, p) => {
+  // Category breakdown for pie chart
+  const categoryData = displayData.productAnalytics.reduce((acc, p) => {
     const existing = acc.find(c => c.name === p.product_category)
     if (existing) {
       existing.value += p.revenue
@@ -372,18 +356,10 @@ export default function AdminDashboard() {
     return acc
   }, [] as { name: string; value: number; stock: number }[])
   
-  // Also ensure topProducts and recentPurchases use mock data when empty
-  const topProductsData = (!data || !data.topProducts || data.topProducts.length === 0) 
-    ? MOCK_DATA.topProducts 
-    : data.topProducts
-    
-  const recentPurchasesData = (!data || !data.recentPurchases || data.recentPurchases.length === 0) 
-    ? MOCK_DATA.recentPurchases 
-    : data.recentPurchases
-    
-  const cartConversionData = (!data || !data.cartConversion || data.cartConversion.added === 0) 
-    ? MOCK_DATA.cartConversion 
-    : data.cartConversion
+  // Use displayData for these (already merged with mock data)
+  const topProductsData = displayData.topProducts
+  const recentPurchasesData = displayData.recentPurchases
+  const cartConversionData = displayData.cartConversion
 
   return (
     <div className="min-h-screen bg-background">
@@ -397,7 +373,7 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {useMockData && (
+            {isUsingMockData && (
               <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
                 Demo Data
               </span>
