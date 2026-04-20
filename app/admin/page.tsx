@@ -602,21 +602,21 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between mb-2">
                   <Package className="w-5 h-5 text-primary" />
                 </div>
-                <p className="text-2xl font-semibold text-foreground">{data?.productAnalytics?.length || 0}</p>
+                <p className="text-2xl font-semibold text-foreground">{displayData.productAnalytics.length}</p>
                 <p className="text-xs text-muted-foreground mt-1">Total Products</p>
               </div>
               <div className="bg-card rounded-2xl p-5 border border-border/50">
                 <div className="flex items-center justify-between mb-2">
                   <ShoppingCart className="w-5 h-5 text-primary" />
                 </div>
-                <p className="text-2xl font-semibold text-foreground">{data?.totalStock || 0}</p>
+                <p className="text-2xl font-semibold text-foreground">{displayData.totalStock}</p>
                 <p className="text-xs text-muted-foreground mt-1">Total Stock</p>
               </div>
               <div className="bg-card rounded-2xl p-5 border border-border/50">
                 <div className="flex items-center justify-between mb-2">
-                  <AlertTriangle className={`w-5 h-5 ${data?.lowStockCount && data.lowStockCount > 0 ? 'text-amber-500' : 'text-green-500'}`} />
+                  <AlertTriangle className={`w-5 h-5 ${displayData.lowStockCount > 0 ? 'text-amber-500' : 'text-green-500'}`} />
                 </div>
-                <p className="text-2xl font-semibold text-foreground">{data?.lowStockCount || 0}</p>
+                <p className="text-2xl font-semibold text-foreground">{displayData.lowStockCount}</p>
                 <p className="text-xs text-muted-foreground mt-1">Low Stock Items</p>
               </div>
               <div className="bg-card rounded-2xl p-5 border border-border/50">
@@ -624,7 +624,7 @@ export default function AdminDashboard() {
                   <DollarSign className="w-5 h-5 text-primary" />
                 </div>
                 <p className="text-2xl font-semibold text-foreground">
-                  ${data?.productAnalytics?.reduce((sum, p) => sum + p.revenue, 0).toFixed(2) || "0.00"}
+                  ${displayData.productAnalytics.reduce((sum, p) => sum + p.revenue, 0).toFixed(2)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">Total Product Revenue</p>
               </div>
@@ -674,7 +674,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(data?.productAnalytics || [])
+                    {displayData.productAnalytics
                       .sort((a, b) => b.revenue - a.revenue)
                       .map((product) => {
                         const convRate = product.views > 0 ? ((product.purchases / product.views) * 100).toFixed(1) : "0"
