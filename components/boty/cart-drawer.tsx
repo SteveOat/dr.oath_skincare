@@ -14,6 +14,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { useCart } from "./cart-context"
+import { trackPurchase } from "@/lib/analytics"
 
 export function CartDrawer() {
   const router = useRouter()
@@ -27,6 +28,14 @@ export function CartDrawer() {
   const handleCheckout = () => {
     setShowPurchaseModal(true)
     setIsPurchaseLoading(true)
+    
+    // Track purchase
+    trackPurchase(total, items.map(item => ({
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity
+    })))
     
     setTimeout(() => {
       setIsPurchaseLoading(false)

@@ -8,6 +8,7 @@ import { ChevronLeft, Minus, Plus, ChevronDown, Leaf, Heart, Award, Recycle, Sta
 import { Header } from "@/components/boty/header"
 import { Footer } from "@/components/boty/footer"
 import { useCart } from "@/components/boty/cart-context"
+import { trackProductView, trackPurchase } from "@/lib/analytics"
 
 const products: Record<string, {
   id: string
@@ -106,7 +107,14 @@ export default function ProductPage() {
 
   useEffect(() => {
     window.scrollTo(0, 0)
-  }, [productId])
+    // Track product view
+    trackProductView({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      category: "skincare"
+    })
+  }, [productId, product.id, product.name, product.price])
 
   const toggleAccordion = (section: AccordionSection) => {
     setOpenAccordion(openAccordion === section ? null : section)
@@ -130,6 +138,11 @@ export default function ProductPage() {
   const handleBuyNow = () => {
     setShowPurchaseModal(true)
     setIsPurchaseLoading(true)
+    
+    // Track purchase
+    trackPurchase(product.price * quantity, [
+      { id: product.id, name: product.name, price: product.price, quantity }
+    ])
     
     setTimeout(() => {
       setIsPurchaseLoading(false)

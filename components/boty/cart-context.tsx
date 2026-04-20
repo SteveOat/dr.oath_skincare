@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, type ReactNode } from "react"
+import { trackCartEvent } from "@/lib/analytics"
 
 export interface CartItem {
   id: string
@@ -32,6 +33,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItem = (newItem: Omit<CartItem, "quantity">) => {
     setItems(currentItems => {
       const existingItem = currentItems.find(item => item.id === newItem.id)
+      const newSubtotal = currentItems.reduce((sum, item) => sum + item.price * item.quantity, 0) + newItem.price
+      
+      // Track cart event
+      trackCartEvent("add", { id: newItem.id, name: newItem.name, price: newItem.price }, 1, newSubtotal)
+      
       if (existingItem) {
         return currentItems.map(item =>
           item.id === newItem.id
@@ -45,7 +51,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   const removeItem = (id: string) => {
-    setItems(currentItems => currentItems.filter(item => item.id !== id))
+    setItems(currentItems => {
+      const itemToRemove = currentItems.find(item => item.id === id)
+      if (itemToRemove) {
+        const newSubtotal = currentItems.reduce((sum, item) => sum + item.price * item.quantity, 0) - (itemToRemove.price * itemToRemove.quantity)
+        trackCartEvent("remove", { id: itemToRemove.id, name: itemToRemove.name, price: itemToRemove.price }, itemToRemove.quantity, newSubtotal)
+      }
+      return currentItems.filter(item => item.id !== id)
+    })
   }
 
   const updateQuantity = (id: string, quantity: number) => {
