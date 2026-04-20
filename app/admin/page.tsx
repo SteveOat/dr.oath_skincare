@@ -367,9 +367,11 @@ export default function AdminDashboard() {
   const cartConversionData = displayData.cartConversion
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border/50 bg-card sticky top-0 z-10">
+    <div className="min-h-screen bg-background flex">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <header className="border-b border-border/50 bg-card sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="font-serif text-2xl text-foreground">Analytics Dashboard</h1>
@@ -1029,9 +1031,12 @@ export default function AdminDashboard() {
           </>
         ) : null}
       </main>
+      </div>
       
-      {/* AI Analytics Chatbot */}
-      <AnalyticsChatbot />
+      {/* AI Analytics Chatbot - Always visible on right side */}
+      <div className="hidden lg:block sticky top-0 h-screen">
+        <AnalyticsChatbot />
+      </div>
     </div>
   )
 }
