@@ -293,6 +293,9 @@ export default function AdminDashboard() {
 
   // Create stable display data by merging real data with mock data for empty sections
   // This is computed on every render but doesn't trigger re-renders
+  // Check if productAnalytics has actual purchase/revenue data (not just inventory)
+  const hasRealProductAnalytics = data?.productAnalytics?.some(p => p.views > 0 || p.purchases > 0 || p.revenue > 0) || false
+  
   const displayData: AnalyticsData = data ? {
     totalSessions: data.totalSessions > 0 ? data.totalSessions : MOCK_DATA.totalSessions,
     totalPageViews: data.totalPageViews > 0 ? data.totalPageViews : MOCK_DATA.totalPageViews,
@@ -305,9 +308,9 @@ export default function AdminDashboard() {
     recentPurchases: data.recentPurchases.length > 0 ? data.recentPurchases : MOCK_DATA.recentPurchases,
     dailyPageViews: data.dailyPageViews.length > 0 ? data.dailyPageViews : MOCK_DATA.dailyPageViews,
     cartConversion: data.cartConversion.added > 0 ? data.cartConversion : MOCK_DATA.cartConversion,
-    productAnalytics: data.productAnalytics.length > 0 ? data.productAnalytics : MOCK_DATA.productAnalytics,
-    totalStock: data.totalStock > 0 ? data.totalStock : MOCK_DATA.totalStock,
-    lowStockCount: data.productAnalytics.length > 0 ? data.lowStockCount : MOCK_DATA.lowStockCount
+    productAnalytics: hasRealProductAnalytics ? data.productAnalytics : MOCK_DATA.productAnalytics,
+    totalStock: hasRealProductAnalytics ? data.totalStock : MOCK_DATA.totalStock,
+    lowStockCount: hasRealProductAnalytics ? data.lowStockCount : MOCK_DATA.lowStockCount
   } : MOCK_DATA
   
   // Check if we're using any mock data
