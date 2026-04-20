@@ -516,36 +516,33 @@ export default function AdminDashboard() {
               {/* Revenue by Category */}
               <div className="bg-card rounded-2xl p-6 border border-border/50">
                 <h3 className="font-serif text-lg text-foreground mb-4">Revenue by Category</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                <div className="w-full" style={{ height: 256 }}>
+                  <ResponsiveContainer width="100%" height={256}>
+                    <PieChart width={400} height={256}>
                       <Pie
-                        data={categoryData.length > 0 ? categoryData : [
-                          { name: "serums", value: 8287, stock: 100 },
-                          { name: "moisturizers", value: 4914, stock: 27 },
-                          { name: "cleansers", value: 2565, stock: 116 },
-                          { name: "oils", value: 4390, stock: 69 },
-                          { name: "masks", value: 2336, stock: 46 },
-                          { name: "toners", value: 1192, stock: 138 }
+                        data={[
+                          { name: "serums", value: 8287 },
+                          { name: "moisturizers", value: 4914 },
+                          { name: "cleansers", value: 2565 },
+                          { name: "oils", value: 4390 },
+                          { name: "masks", value: 2336 },
+                          { name: "toners", value: 1192 }
                         ]}
                         dataKey="value"
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={80}
+                        outerRadius={70}
+                        fill="#5D6B5D"
                         label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        labelLine={false}
+                        labelLine={true}
                       >
-                        {(categoryData.length > 0 ? categoryData : [
-                          { name: "serums", value: 8287, stock: 100 },
-                          { name: "moisturizers", value: 4914, stock: 27 },
-                          { name: "cleansers", value: 2565, stock: 116 },
-                          { name: "oils", value: 4390, stock: 69 },
-                          { name: "masks", value: 2336, stock: 46 },
-                          { name: "toners", value: 1192, stock: 138 }
-                        ]).map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
+                        <Cell fill="#5D6B5D" />
+                        <Cell fill="#8B9D8B" />
+                        <Cell fill="#A3B5A3" />
+                        <Cell fill="#C4D4C4" />
+                        <Cell fill="#7A8B7A" />
+                        <Cell fill="#6D7D6D" />
                       </Pie>
                       <Tooltip 
                         formatter={(value: number) => [`$${value.toFixed(2)}`, 'Revenue']}
