@@ -614,7 +614,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           </>
-        ) : (
+        ) : activeTab === "products" ? (
           <>
             {/* Products Tab */}
             <div className="grid lg:grid-cols-4 gap-4 mb-8">
