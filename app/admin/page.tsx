@@ -1028,12 +1028,10 @@ export default function AdminDashboard() {
             </div>
           </>
         ) : null}
-        
-        {/* AI Analytics Chatbot - Below main content */}
-        <div className="mt-8 mb-8">
-          <AnalyticsChatbot />
-        </div>
       </main>
+      
+      {/* AI Analytics Chatbot - Floating */}
+      <AnalyticsChatbot />
     </div>
   )
 }
