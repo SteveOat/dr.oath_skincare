@@ -695,10 +695,9 @@ export default function AdminDashboard() {
                             </td>
                             <td className="py-4 px-4">
                               <span 
-                                className="inline-flex px-2 py-1 rounded-full text-xs capitalize"
+                                className="inline-flex px-3 py-1 rounded-full text-xs capitalize font-medium text-white"
                                 style={{ 
-                                  backgroundColor: `${CATEGORY_COLORS[product.product_category] || '#5D6B5D'}20`,
-                                  color: CATEGORY_COLORS[product.product_category] || '#5D6B5D'
+                                  backgroundColor: CATEGORY_COLORS[product.product_category] || '#5D6B5D'
                                 }}
                               >
                                 {product.product_category}
