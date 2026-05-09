@@ -32,12 +32,12 @@ export function AnalyticsChatbot() {
   }
 
   const suggestedQuestions = [
-    "Which ad platform has the best CVR?",
+    "Which platform has the best ROAS?",
+    "Which campaigns are unprofitable?",
     "Where should I scale ad spend?",
+    "What's our overall ROAS?",
     "Top campaigns by conversions?",
-    "What's our best seller?",
     "Products to restock?",
-    "Revenue vs competitors?",
   ]
 
   return (

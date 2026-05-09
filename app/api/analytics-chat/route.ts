@@ -5,6 +5,13 @@ import {
   UIMessage,
 } from 'ai'
 import { createClient } from '@/lib/supabase/server'
+import {
+  type AdSpendRow,
+  spendByPlatform,
+  spendByCampaign,
+  totalSpendInRange,
+  computeReturns,
+} from '@/lib/ads/spend'
 
 export const maxDuration = 30
 
@@ -134,6 +141,7 @@ export async function POST(req: Request) {
     conversationsResult,
     customerMessagesResult,
     adClicksResult,
+    adSpendResult,
   ] = await Promise.all([
     supabase.from("analytics_sessions").select("*"),
     supabase.from("analytics_page_views").select("*"),
@@ -146,6 +154,7 @@ export async function POST(req: Request) {
     supabase.from("conversations").select("*"),
     supabase.from("customer_messages").select("id, conversation_id, direction, created_at").order("created_at", { ascending: false }).limit(50),
     supabase.from("analytics_ad_clicks").select("session_id, platform, utm_campaign, created_at"),
+    supabase.from("analytics_ad_spend").select("id, platform, campaign, period_start, period_end, amount, currency"),
   ])
 
   const sessions = sessionsResult.data || []
@@ -159,6 +168,10 @@ export async function POST(req: Request) {
   const conversations = conversationsResult.data || []
   const recentMessages = customerMessagesResult.data || []
   const adClicks = adClicksResult.data || []
+  const adSpendRows: AdSpendRow[] = (adSpendResult.data || []).map((r: any) => ({
+    ...r,
+    amount: Number(r.amount),
+  }))
 
   // Aggregates
   const totalSessions = sessions.length
@@ -297,24 +310,77 @@ export async function POST(req: Request) {
     (c: any) => !["direct", "organic"].includes(c.platform),
   ).length
 
+  // Prorate ad spend across the same 30-day window we use for revenue/trends
+  const spendRangeEnd = new Date()
+  const spendRangeStart = new Date(spendRangeEnd.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const platformSpend30d = spendByPlatform(adSpendRows, spendRangeStart, spendRangeEnd)
+  const campaignSpend30d = spendByCampaign(adSpendRows, spendRangeStart, spendRangeEnd)
+  const totalAdSpend30d = totalSpendInRange(adSpendRows, spendRangeStart, spendRangeEnd)
+
+  // Surface platforms that have spend but no clicks yet — they'll show ROAS=0
+  platformSpend30d.forEach((_, platform) => {
+    if (!platformMap.has(platform)) {
+      platformMap.set(platform, { clicks: 0, conversions: 0, revenue: 0 })
+    }
+  })
+
   const platformBreakdown = Array.from(platformMap.entries())
-    .map(([platform, agg]) => ({
-      platform,
-      clicks: agg.clicks,
-      conversions: agg.conversions,
-      revenue: agg.revenue,
-      cvr: agg.clicks > 0 ? (agg.conversions / agg.clicks) * 100 : 0,
-      share: totalAdClicks > 0 ? (agg.clicks / totalAdClicks) * 100 : 0,
-    }))
-    .sort((a, b) => b.clicks - a.clicks)
+    .map(([platform, agg]) => {
+      const spend = platformSpend30d.get(platform) || 0
+      const returns = computeReturns({
+        spend,
+        revenue: agg.revenue,
+        clicks: agg.clicks,
+        conversions: agg.conversions,
+      })
+      return {
+        platform,
+        clicks: agg.clicks,
+        conversions: agg.conversions,
+        revenue: agg.revenue,
+        spend,
+        roas: returns.roas,
+        cpc: returns.cpc,
+        cpa: returns.cpa,
+        profit: returns.profit,
+        cvr: agg.clicks > 0 ? (agg.conversions / agg.clicks) * 100 : 0,
+        share: totalAdClicks > 0 ? (agg.clicks / totalAdClicks) * 100 : 0,
+      }
+    })
+    .sort((a, b) => (b.spend + b.clicks) - (a.spend + a.clicks))
 
   const topAdCampaigns = Array.from(campaignMap.values())
-    .sort((a, b) => b.clicks - a.clicks)
+    .map((c) => {
+      const key = `${c.platform}::${c.campaign}`
+      const spend = campaignSpend30d.get(key) || 0
+      // Estimate revenue per campaign by proxy: assume share of platform revenue equal to share of clicks
+      const platAgg = platformMap.get(c.platform)
+      const revenue =
+        platAgg && platAgg.clicks > 0
+          ? (c.clicks / platAgg.clicks) * platAgg.revenue
+          : 0
+      const returns = computeReturns({
+        spend,
+        revenue,
+        clicks: c.clicks,
+        conversions: c.conversions,
+      })
+      return {
+        ...c,
+        spend,
+        revenue,
+        roas: returns.roas,
+        cpa: returns.cpa,
+        cvr: c.clicks > 0 ? (c.conversions / c.clicks) * 100 : 0,
+      }
+    })
+    .sort((a, b) => (b.spend + b.clicks) - (a.spend + a.clicks))
     .slice(0, 5)
-    .map((c) => ({
-      ...c,
-      cvr: c.clicks > 0 ? (c.conversions / c.clicks) * 100 : 0,
-    }))
+
+  const overallRoas30d =
+    totalAdSpend30d > 0
+      ? Array.from(platformMap.values()).reduce((s, p) => s + p.revenue, 0) / totalAdSpend30d
+      : null
 
   const hasRealData = totalSessions > 0 || totalPageViews > 0 || inventory.length > 0
   const hasMessaging = conversations.length > 0
@@ -421,37 +487,50 @@ ${dashboardData.recentPurchases.length > 0
   ? dashboardData.recentPurchases.map((p, i) => `${i + 1}. $${p.total.toFixed(2)} — ${p.items} items — ${p.daysAgo === 0 ? "today" : `${p.daysAgo}d ago`}`).join("\n")
   : "No recent purchases."}
 
-### Ads Attribution & Traffic Sources
+### Ads Attribution, Spend & ROAS
 - Total Attributed Clicks: ${totalAdClicks.toLocaleString()}
 - Paid Traffic Share: ${totalAdClicks > 0 ? ((paidAdClicks / totalAdClicks) * 100).toFixed(1) : "0"}% (${paidAdClicks} of ${totalAdClicks})
 - Ad Clicks (last 7d vs prior 7d): ${realTrends.adClicksChange}
+- Total Ad Spend (last 30d, prorated): $${totalAdSpend30d.toFixed(2)}
+- Overall ROAS (30d revenue ÷ spend): ${overallRoas30d == null ? "n/a (no spend recorded)" : `${overallRoas30d.toFixed(2)}×`}
 
-Platform breakdown (real-time, attributed via UTM + click IDs like fbclid, gclid, ttclid):
+Platform breakdown (revenue & spend prorated to last 30 days; ROAS = revenue ÷ spend):
 ${platformBreakdown.length > 0
   ? platformBreakdown
-      .map(
-        (p) =>
-          `- ${p.platform}: ${p.clicks} clicks (${p.share.toFixed(1)}% share), ${p.conversions} conversions, ${p.cvr.toFixed(2)}% CVR, $${p.revenue.toFixed(2)} attributed revenue`,
-      )
+      .map((p) => {
+        const roas = p.roas == null ? "n/a" : `${p.roas.toFixed(2)}×`
+        const cpc = p.cpc == null ? "n/a" : `$${p.cpc.toFixed(2)}`
+        const cpa = p.cpa == null ? "n/a" : `$${p.cpa.toFixed(2)}`
+        const profit = p.profit >= 0 ? `+$${p.profit.toFixed(2)}` : `-$${Math.abs(p.profit).toFixed(2)}`
+        return `- ${p.platform}: spend $${p.spend.toFixed(2)} | ${p.clicks} clicks (${p.share.toFixed(1)}% share) | CPC ${cpc} | ${p.conversions} conv | CPA ${cpa} | rev $${p.revenue.toFixed(2)} | CVR ${p.cvr.toFixed(2)}% | ROAS ${roas} | profit ${profit}`
+      })
       .join("\n")
   : "- No ad-attributed traffic captured yet. Storefront tags new visitors with utm_source, utm_campaign, fbclid, gclid, ttclid on landing."}
 
-Top campaigns:
+Top campaigns (estimated revenue allocates platform revenue by click share):
 ${topAdCampaigns.length > 0
   ? topAdCampaigns
-      .map(
-        (c, i) =>
-          `${i + 1}. [${c.platform}] ${c.campaign}: ${c.clicks} clicks, ${c.conversions} conversions, ${c.cvr.toFixed(2)}% CVR`,
-      )
+      .map((c, i) => {
+        const roas = c.roas == null ? "n/a" : `${c.roas.toFixed(2)}×`
+        const cpa = c.cpa == null ? "n/a" : `$${c.cpa.toFixed(2)}`
+        return `${i + 1}. [${c.platform}] ${c.campaign}: spend $${c.spend.toFixed(2)} | ${c.clicks} clicks | ${c.conversions} conv | CPA ${cpa} | est. rev $${c.revenue.toFixed(2)} | CVR ${c.cvr.toFixed(2)}% | ROAS ${roas}`
+      })
       .join("\n")
   : "- No tagged campaigns yet."}
+
+ROAS interpretation guidelines (use when making recommendations):
+- ROAS ≥ 3.0× = strong, recommend scaling spend
+- ROAS 1.5–3.0× = healthy, recommend optimizing creative or audience
+- ROAS 1.0–1.5× = marginal, recommend reducing or fixing landing page
+- ROAS < 1.0× = unprofitable, recommend pausing or reworking
+- "n/a" ROAS means no spend has been recorded yet — recommend the user enter spend data via the Manage Spend drawer
 
 ## Your Capabilities:
 1. Answer questions about sales, revenue, products, inventory, and customer engagement
 2. Analyze CTA click performance and identify which storefront elements drive the most engagement
 3. Surface unread/urgent customer messages and recommend response priorities
 4. Provide competitor positioning insights and market trend analysis
-5. Compare ad-platform performance (Facebook, Google, Instagram, TikTok, LINE, etc.) — recommend where to scale or cut spend based on CVR and attributed revenue
+5. Compare ad-platform performance (Facebook, Google, Instagram, TikTok, LINE, etc.) using true ROAS, CPC, CPA, and profit — recommend where to scale or cut spend
 6. Suggest actionable recommendations grounded in real numbers
 7. Calculate metrics, ratios, and period-over-period comparisons
 8. Explain data patterns, anomalies, and correlations across analytics + messaging + ads
