@@ -1,22 +1,18 @@
 import { generateText, Output } from "ai"
-import { xai, type XaiLanguageModelChatOptions } from "@ai-sdk/xai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 
 /**
  * Market Research Agent
  * ---------------------
- * Real AI agent powered by xAI Grok with native Live Search (web + news + X).
- * Uses XAI_API_KEY directly via the @ai-sdk/xai provider.
+ * Routes Grok with native Live Search through the Vercel AI Gateway.
+ * Uses AI_GATEWAY_API_KEY (the same key the chatbot uses) — no direct xAI
+ * provider key required.
  *
- * Why not the Vercel AI Gateway path used by the chatbot?
- * The chatbot uses `model: 'openai/gpt-5-mini'` which is zero-config through
- * the Gateway because OpenAI is one of the auto-authenticated providers.
- * xAI through the Gateway requires AI_GATEWAY_API_KEY to be set explicitly,
- * so going direct with XAI_API_KEY is simpler when the user has an xAI key.
- *
- * Live Search is enabled via `providerOptions.xai.searchParameters` and
- * citations flow back through `result.sources`.
+ * Model strings like "xai/grok-4-fast-non-reasoning" tell the AI SDK to send
+ * the request through https://ai-gateway.vercel.sh, which authenticates with
+ * AI_GATEWAY_API_KEY and forwards the call (including searchParameters) to
+ * xAI on the project's behalf. All cost is billed through the Gateway.
  */
 
 const InsightSchema = z.object({
@@ -70,10 +66,9 @@ export type RunResult = {
 
 type CollectedSource = { url: string; title: string }
 
-// grok-4-fast-non-reasoning is the cheapest fast model that supports Live Search.
-const SEARCH_MODEL = "grok-4-fast-non-reasoning"
-// grok-3-mini is fast and inexpensive for the structured-output synthesis step.
-const SYNTH_MODEL = "grok-3-mini"
+// Gateway model strings: "<provider>/<model>"
+const SEARCH_MODEL = "xai/grok-4-fast-non-reasoning"
+const SYNTH_MODEL = "xai/grok-3-mini"
 
 export async function runMarketResearch(opts: RunOptions = {}): Promise<RunResult> {
   const supabase = await createClient()
@@ -113,31 +108,6 @@ export async function runMarketResearch(opts: RunOptions = {}): Promise<RunResul
   const today = new Date().toISOString().slice(0, 10)
   const topicList = (topics || []).map((t, i) => `${i + 1}. ${t}`).join("\n")
 
-  // Pre-flight: detect missing key and surface a clear, actionable error.
-  if (!process.env.XAI_API_KEY) {
-    const message =
-      "XAI_API_KEY is not visible to the dev server. The variable is listed as available in v0's Vars panel, but isn't being injected into the Node process. To fix: open the v0 settings menu (top right) → Vars, click the XAI_API_KEY row, paste the value again (must start with \"xai-\"), and save. Then click \"Run now\" again. If that doesn't work, refresh the v0 sandbox from the project menu."
-    await supabase
-      .from("market_research_reports")
-      .update({
-        status: "failed",
-        error: message,
-        model: `xai/${SEARCH_MODEL}`,
-        duration_ms: Date.now() - startedAt,
-      })
-      .eq("id", reportId)
-    await supabase
-      .from("market_research_settings")
-      .update({
-        last_run_at: new Date().toISOString(),
-        last_run_status: "failed",
-        last_run_error: message,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", 1)
-    return { reportId, status: "failed", error: message }
-  }
-
   const now = new Date()
   const fromDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
     .toISOString()
@@ -164,9 +134,10 @@ Be specific — name competitors, products, prices, percentages, dates wherever 
   const searchUserPrompt = `Run live searches and produce today's market research briefing.`
 
   try {
-    // STEP 1 — Grok with Live Search
+    // STEP 1 — Grok with Live Search via the Gateway.
+    // searchParameters are forwarded to xAI by the Gateway under providerOptions.xai.
     const research = await generateText({
-      model: xai(SEARCH_MODEL),
+      model: SEARCH_MODEL,
       system: searchSystemPrompt,
       prompt: searchUserPrompt,
       maxRetries: 1,
@@ -184,7 +155,7 @@ Be specific — name competitors, products, prices, percentages, dates wherever 
               { type: "x", postFavoriteCount: 50 },
             ],
           },
-        } satisfies XaiLanguageModelChatOptions,
+        },
       },
     })
 
@@ -207,14 +178,14 @@ Be specific — name competitors, products, prices, percentages, dates wherever 
       }
     }
 
-    // STEP 2 — Structure the briefing
+    // STEP 2 — Structure the briefing into the report schema.
     const sourceLines =
       collectedSources.length > 0
         ? collectedSources.map((s, i) => `${i + 1}. ${s.title} — ${s.url}`).join("\n")
         : "(no sources collected from Live Search)"
 
     const synth = await generateText({
-      model: xai(SYNTH_MODEL),
+      model: SYNTH_MODEL,
       system: `You convert a free-form market research briefing into a structured JSON report. Preserve every concrete fact, name, price, and date from the source material.`,
       prompt: `Source briefing (with embedded citations):
 
@@ -241,7 +212,7 @@ Convert this into the structured report. Insights should be the 3-8 most materia
         topics: report.topics,
         sources: collectedSources,
         raw_text: rawBriefing || null,
-        model: `xai/${SEARCH_MODEL} + Live Search → xai/${SYNTH_MODEL}`,
+        model: `${SEARCH_MODEL} + Live Search → ${SYNTH_MODEL}`,
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", reportId)
@@ -262,18 +233,22 @@ Convert this into the structured report. Insights should be the 3-8 most materia
     let message = rawMessage
     const lower = rawMessage.toLowerCase()
     if (
+      lower.includes("unauthenticated") ||
+      (lower.includes("ai gateway") && lower.includes("auth"))
+    ) {
+      message = `AI Gateway authentication failed. Your AI_GATEWAY_API_KEY is missing or invalid. Get one at https://vercel.com/dashboard/ai-gateway → API Keys, then save it in the project's Vars panel. (raw: ${rawMessage})`
+    } else if (
       lower.includes("incorrect api key") ||
       lower.includes("bad credentials") ||
-      lower.includes("invalid api key") ||
-      lower.includes("unauthenticated")
+      lower.includes("invalid api key")
     ) {
-      message = `Your XAI_API_KEY is invalid. xAI keys start with "xai-" and come from https://console.x.ai. Update the value in the project's Vars panel and try again. (raw: ${rawMessage})`
+      message = `Provider rejected the request — your AI_GATEWAY_API_KEY may be invalid. (raw: ${rawMessage})`
     } else if (lower.includes("gone") || lower.includes("410")) {
-      message = `xAI returned 410 Gone — the model "${SEARCH_MODEL}" may have been deprecated for your account. Check https://docs.x.ai for current model names. (raw: ${rawMessage})`
+      message = `Provider returned 410 Gone — model "${SEARCH_MODEL}" may have been deprecated. Check current model names at https://docs.x.ai. (raw: ${rawMessage})`
     } else if (lower.includes("insufficient") && lower.includes("credit")) {
-      message = `Your xAI account is out of credits. Top up at https://console.x.ai. (raw: ${rawMessage})`
+      message = `Your AI Gateway account is out of credits. Top up at https://vercel.com/dashboard/ai-gateway. (raw: ${rawMessage})`
     } else if (lower.includes("rate limit") || lower.includes("429")) {
-      message = `xAI rate-limited the request. Wait a minute and try again. (raw: ${rawMessage})`
+      message = `Rate-limited. Wait a minute and try again. (raw: ${rawMessage})`
     }
     console.error("[market-research] Agent failed:", message)
 
@@ -282,7 +257,7 @@ Convert this into the structured report. Insights should be the 3-8 most materia
       .update({
         status: "failed",
         error: message,
-        model: `xai/${SEARCH_MODEL}`,
+        model: SEARCH_MODEL,
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", reportId)
