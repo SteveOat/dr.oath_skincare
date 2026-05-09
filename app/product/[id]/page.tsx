@@ -8,7 +8,7 @@ import { ChevronLeft, Minus, Plus, ChevronDown, Leaf, Heart, Award, Recycle, Sta
 import { Header } from "@/components/boty/header"
 import { Footer } from "@/components/boty/footer"
 import { useCart } from "@/components/boty/cart-context"
-import { trackProductView, trackPurchase } from "@/lib/analytics"
+import { trackProductView, trackPurchase, trackClick } from "@/lib/analytics"
 
 const products: Record<string, {
   id: string
@@ -121,6 +121,7 @@ export default function ProductPage() {
   }
 
   const handleAddToCart = () => {
+    trackClick("cta", `Add to Cart: ${product.name}`, `pdp-add-to-cart-${product.id}`)
     for (let i = 0; i < quantity; i++) {
       addItem({
         id: product.id,
@@ -136,6 +137,7 @@ export default function ProductPage() {
   }
 
   const handleBuyNow = () => {
+    trackClick("cta", `Buy Now: ${product.name}`, `pdp-buy-now-${product.id}`)
     setShowPurchaseModal(true)
     setIsPurchaseLoading(true)
     

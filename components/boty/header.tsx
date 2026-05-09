@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Menu, X, ShoppingBag, Search, User } from "lucide-react"
 import { CartDrawer } from "./cart-drawer"
 import { useCart } from "./cart-context"
+import { trackClick } from "@/lib/analytics"
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -28,18 +29,21 @@ export function Header() {
           <div className="hidden lg:flex items-center gap-8">
             <Link
               href="/shop"
+              onClick={() => trackClick("link", "Shop", "nav-shop")}
               className="text-sm tracking-wide text-foreground/70 hover:text-foreground boty-transition"
             >
               Shop
             </Link>
             <Link
               href="/"
+              onClick={() => trackClick("link", "About", "nav-about")}
               className="text-sm tracking-wide text-foreground/70 hover:text-foreground boty-transition"
             >
               About
             </Link>
             <Link
               href="/"
+              onClick={() => trackClick("link", "Ingredients", "nav-ingredients")}
               className="text-sm tracking-wide text-foreground/70 hover:text-foreground boty-transition"
             >
               Ingredients
@@ -47,7 +51,11 @@ export function Header() {
           </div>
 
           {/* Logo */}
-          <Link href="/" className="absolute left-1/2 -translate-x-1/2">
+          <Link
+            href="/"
+            onClick={() => trackClick("link", "Logo", "nav-logo")}
+            className="absolute left-1/2 -translate-x-1/2"
+          >
             <h1 className="font-serif text-3xl tracking-wider text-foreground">Dr.Oat  SkinCare</h1>
           </Link>
 
@@ -55,6 +63,7 @@ export function Header() {
           <div className="flex items-center gap-4">
             <button
               type="button"
+              onClick={() => trackClick("button", "Search", "nav-search")}
               className="p-2 text-foreground/70 hover:text-foreground boty-transition"
               aria-label="Search"
             >
@@ -62,6 +71,7 @@ export function Header() {
             </button>
             <Link
               href="/account"
+              onClick={() => trackClick("link", "Account", "nav-account")}
               className="hidden sm:block p-2 text-foreground/70 hover:text-foreground boty-transition"
               aria-label="Account"
             >
@@ -69,7 +79,10 @@ export function Header() {
             </Link>
             <button
               type="button"
-              onClick={() => setIsOpen(true)}
+              onClick={() => {
+                trackClick("button", "Open Cart", "nav-cart")
+                setIsOpen(true)
+              }}
               className="relative p-2 text-foreground/70 hover:text-foreground boty-transition"
               aria-label="Cart"
             >

@@ -5,6 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { ShoppingBag } from "lucide-react"
 import { useCart } from "./cart-context"
+import { trackClick } from "@/lib/analytics"
 
 type Category = "cream" | "oil" | "serum"
 
@@ -153,6 +154,7 @@ export function ProductGrid() {
 
   const handleCategoryChange = (category: Category) => {
     if (category !== selectedCategory) {
+      trackClick("button", `Category: ${category}`, `category-filter-${category}`)
       setIsTransitioning(true)
       setTimeout(() => {
         setSelectedCategory(category)
@@ -261,6 +263,7 @@ export function ProductGrid() {
             <Link
               key={`${selectedCategory}-${product.id}`}
               href={`/product/${product.id}`}
+              onClick={() => trackClick("link", product.name, `product-card-${product.id}`)}
               className={`group transition-all duration-500 ease-out ${
                 isVisible && !isTransitioning ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
               }`}
@@ -296,6 +299,7 @@ export function ProductGrid() {
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
+                      trackClick("button", `Quick add: ${product.name}`, `quick-add-${product.id}`)
                       addItem({
                         id: product.id,
                         name: product.name,
@@ -332,6 +336,7 @@ export function ProductGrid() {
         <div className="text-center mt-12">
           <Link
             href="/shop"
+            onClick={() => trackClick("cta", "View All Products", "product-grid-view-all")}
             className="inline-flex items-center justify-center gap-2 bg-transparent border border-foreground/20 text-foreground px-8 py-4 rounded-full text-sm tracking-wide boty-transition hover:bg-foreground/5"
           >
             View All Products

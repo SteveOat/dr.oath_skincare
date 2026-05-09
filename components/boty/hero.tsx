@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
+import { trackClick } from "@/lib/analytics"
 
 export function Hero() {
   return (
@@ -48,6 +49,7 @@ export function Hero() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-blur-in opacity-0" style={{ animationDelay: '1s', animationFillMode: 'forwards' }}>
               <Link
                 href="/shop"
+                onClick={() => trackClick("cta", "Shop Now", "hero-shop-now")}
                 className="group inline-flex items-center justify-center gap-3 bg-primary text-primary-foreground px-8 py-4 rounded-full text-sm tracking-wide boty-transition hover:bg-primary/90 boty-shadow"
               >
                 Shop Now

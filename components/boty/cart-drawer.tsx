@@ -14,7 +14,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { useCart } from "./cart-context"
-import { trackPurchase } from "@/lib/analytics"
+import { trackPurchase, trackClick } from "@/lib/analytics"
 
 export function CartDrawer() {
   const router = useRouter()
@@ -26,6 +26,7 @@ export function CartDrawer() {
   const total = subtotal + shipping
 
   const handleCheckout = () => {
+    trackClick("cta", "Checkout", "cart-checkout")
     setShowPurchaseModal(true)
     setIsPurchaseLoading(true)
     

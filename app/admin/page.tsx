@@ -55,8 +55,10 @@ interface AnalyticsData {
   totalCartEvents: number
   totalPurchases: number
   totalRevenue: number
+  totalClicks: number
   pageViewsByPath: { path: string; count: number }[]
   topProducts: { name: string; views: number }[]
+  topClicks: { label: string; count: number }[]
   recentPurchases: { id: string; total: number; items: number; created_at: string }[]
   dailyPageViews: { date: string; views: number }[]
   cartConversion: { added: number; purchased: number }
@@ -83,6 +85,14 @@ const MOCK_DATA: AnalyticsData = {
   totalCartEvents: 1456,
   totalPurchases: 342,
   totalRevenue: 28945.50,
+  totalClicks: 5824,
+  topClicks: [
+    { label: "Hero — Shop Now", count: 1247 },
+    { label: "Nav — Cart", count: 892 },
+    { label: "Product — Add to Cart", count: 743 },
+    { label: "Cart — Checkout", count: 412 },
+    { label: "Grid — Quick Add", count: 387 }
+  ],
   pageViewsByPath: [
     { path: "/", count: 4521 },
     { path: "/shop", count: 3892 },
@@ -141,6 +151,8 @@ export default function AdminDashboard() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [activeTab, setActiveTab] = useState<"overview" | "products" | "competitors">("overview")
   const [unreadCount, setUnreadCount] = useState(0)
+  const [isLive, setIsLive] = useState(false)
+  const [pulseCount, setPulseCount] = useState(0)
 
   const fetchUnreadCount = async () => {
     try {
@@ -176,7 +188,9 @@ export default function AdminDashboard() {
         inventoryRes,
         productViewsDetailRes,
         cartEventsDetailRes,
-        purchasesDetailRes
+        purchasesDetailRes,
+        clicksRes,
+        clicksDetailRes
       ] = await Promise.all([
         supabase.from("analytics_sessions").select("id", { count: "exact" }),
         supabase.from("analytics_page_views").select("id", { count: "exact" }),
@@ -189,7 +203,9 @@ export default function AdminDashboard() {
         supabase.from("products_inventory").select("*"),
         supabase.from("analytics_product_views").select("product_id, product_name"),
         supabase.from("analytics_cart_events").select("product_id, product_name, event_type"),
-        supabase.from("analytics_purchases").select("items")
+        supabase.from("analytics_purchases").select("items"),
+        supabase.from("analytics_clicks").select("id", { count: "exact" }),
+        supabase.from("analytics_clicks").select("element_text, element_id, element_type")
       ])
 
       // Process page paths
@@ -279,6 +295,17 @@ export default function AdminDashboard() {
       const totalStock = productAnalytics.reduce((sum, p) => sum + p.stock_quantity, 0)
       const lowStockCount = productAnalytics.filter(p => p.stock_quantity <= p.low_stock_threshold).length
 
+      // Aggregate top clicks
+      const clickCounts: Record<string, number> = {}
+      clicksDetailRes.data?.forEach((row: { element_text: string | null; element_id: string | null }) => {
+        const label = row.element_text || row.element_id || "Unknown"
+        clickCounts[label] = (clickCounts[label] || 0) + 1
+      })
+      const topClicks = Object.entries(clickCounts)
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+
       setData({
         totalSessions: sessionsRes.count || 0,
         totalPageViews: pageViewsRes.count || 0,
@@ -286,8 +313,10 @@ export default function AdminDashboard() {
         totalCartEvents: cartEventsRes.count || 0,
         totalPurchases: purchasesRes.data?.length || 0,
         totalRevenue,
+        totalClicks: clicksRes.count || 0,
         pageViewsByPath,
         topProducts,
+        topClicks,
         recentPurchases: recentPurchasesRes.data || [],
         dailyPageViews,
         cartConversion: { added: addEvents, purchased: purchaseCount },
@@ -309,9 +338,48 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchAnalytics()
     fetchUnreadCount()
-    // Poll for unread count updates every 10 seconds
-    const interval = setInterval(fetchUnreadCount, 10000)
-    return () => clearInterval(interval)
+
+    // Polling fallback for analytics + unread count
+    const unreadInterval = setInterval(fetchUnreadCount, 10000)
+    const analyticsInterval = setInterval(fetchAnalytics, 30000)
+
+    // Realtime subscription on every analytics table — instant updates on each click/view/purchase
+    const supabase = createClient()
+    const ANALYTICS_TABLES = [
+      "analytics_sessions",
+      "analytics_page_views",
+      "analytics_product_views",
+      "analytics_cart_events",
+      "analytics_purchases",
+      "analytics_clicks",
+    ]
+
+    let pulseTimeout: ReturnType<typeof setTimeout> | null = null
+    const channel = supabase.channel("dashboard-analytics-stream")
+
+    ANALYTICS_TABLES.forEach((table) => {
+      channel.on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table },
+        () => {
+          // Briefly flash the "Live" indicator on each insert
+          setPulseCount((p) => p + 1)
+          if (pulseTimeout) clearTimeout(pulseTimeout)
+          pulseTimeout = setTimeout(() => fetchAnalytics(), 800)
+        },
+      )
+    })
+
+    channel.subscribe((status) => {
+      setIsLive(status === "SUBSCRIBED")
+    })
+
+    return () => {
+      clearInterval(unreadInterval)
+      clearInterval(analyticsInterval)
+      if (pulseTimeout) clearTimeout(pulseTimeout)
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   // Create stable display data by merging real data with mock data for empty sections
@@ -326,8 +394,10 @@ export default function AdminDashboard() {
     totalCartEvents: data.totalCartEvents > 0 ? data.totalCartEvents : MOCK_DATA.totalCartEvents,
     totalPurchases: data.totalPurchases > 0 ? data.totalPurchases : MOCK_DATA.totalPurchases,
     totalRevenue: data.totalRevenue > 0 ? data.totalRevenue : MOCK_DATA.totalRevenue,
+    totalClicks: (data.totalClicks ?? 0) > 0 ? data.totalClicks : MOCK_DATA.totalClicks,
     pageViewsByPath: data.pageViewsByPath.length > 0 ? data.pageViewsByPath : MOCK_DATA.pageViewsByPath,
     topProducts: data.topProducts.length > 0 ? data.topProducts : MOCK_DATA.topProducts,
+    topClicks: (data.topClicks?.length ?? 0) > 0 ? data.topClicks : MOCK_DATA.topClicks,
     recentPurchases: data.recentPurchases.length > 0 ? data.recentPurchases : MOCK_DATA.recentPurchases,
     dailyPageViews: data.dailyPageViews.length > 0 ? data.dailyPageViews : MOCK_DATA.dailyPageViews,
     cartConversion: data.cartConversion.added > 0 ? data.cartConversion : MOCK_DATA.cartConversion,
@@ -362,7 +432,8 @@ export default function AdminDashboard() {
     { label: "Product Views", value: displayData.totalProductViews, icon: Package, change: 15 },
     { label: "Cart Adds", value: displayData.totalCartEvents, icon: ShoppingCart, change: 5 },
     { label: "Purchases", value: displayData.totalPurchases, icon: MousePointer, change: 20 },
-    { label: "Revenue", value: `$${displayData.totalRevenue.toFixed(2)}`, icon: DollarSign, change: 18 }
+    { label: "Revenue", value: `$${displayData.totalRevenue.toFixed(2)}`, icon: DollarSign, change: 18 },
+    { label: "Clicks", value: displayData.totalClicks, icon: MousePointer, change: 24 }
   ]
 
   // Derived data from displayData (stable)
@@ -399,9 +470,35 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {isUsingMockData && (
+            {isUsingMockData ? (
               <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
                 Demo Data
+              </span>
+            ) : (
+              <span
+                key={pulseCount}
+                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-colors ${
+                  isLive
+                    ? "bg-green-50 text-green-700 border-green-200"
+                    : "bg-muted text-muted-foreground border-border/60"
+                }`}
+                aria-live="polite"
+              >
+                <span
+                  className={`relative flex h-2 w-2 ${isLive ? "animate-pulse" : ""}`}
+                >
+                  <span
+                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      isLive ? "bg-green-400 animate-ping" : "bg-muted-foreground"
+                    }`}
+                  />
+                  <span
+                    className={`relative inline-flex rounded-full h-2 w-2 ${
+                      isLive ? "bg-green-500" : "bg-muted-foreground"
+                    }`}
+                  />
+                </span>
+                {isLive ? "Live" : "Connecting"}
               </span>
             )}
             <span className="text-xs text-muted-foreground hidden sm:block">
@@ -478,7 +575,7 @@ export default function AdminDashboard() {
         {activeTab === "overview" ? (
           <>
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-8">
               {stats.map((stat) => (
                 <div key={stat.label} className="bg-card rounded-2xl p-5 border border-border/50">
                   <div className="flex items-center justify-between mb-3">
@@ -648,6 +745,54 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Top Click Targets — live, full width */}
+            <div className="bg-card rounded-2xl p-6 border border-border/50 mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-serif text-lg text-foreground">Top Click Targets</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Buttons, links, and CTAs ranked by real-time clicks
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {displayData.totalClicks.toLocaleString()} total clicks
+                </span>
+              </div>
+              {displayData.topClicks.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">
+                  No click data yet — CTA clicks across the storefront will appear here in real time.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {displayData.topClicks.map((click, i) => {
+                    const max = displayData.topClicks[0]?.count || 1
+                    const pct = (click.count / max) * 100
+                    return (
+                      <div key={click.label} className="flex items-center gap-3">
+                        <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium flex-shrink-0">
+                          {i + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm text-foreground truncate">{click.label}</span>
+                            <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+                              {click.count.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </>
         ) : activeTab === "products" ? (
