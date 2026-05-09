@@ -25,6 +25,8 @@ import {
   CheckCircle2,
   Archive,
   Clock,
+  Sparkles,
+  Loader2,
 } from "lucide-react"
 
 type Channel = "facebook" | "line" | "instagram" | "email" | "web"
@@ -114,6 +116,11 @@ export default function MessagesPage() {
   const [priorityMenuOpen, setPriorityMenuOpen] = useState(false)
   const [tagInputOpen, setTagInputOpen] = useState(false)
   const [newTagValue, setNewTagValue] = useState("")
+  const [suggestions, setSuggestions] = useState<
+    { tone: string; label: string; text: string }[] | null
+  >(null)
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
   const headerControlsRef = useRef<HTMLDivElement>(null)
 
@@ -130,12 +137,14 @@ export default function MessagesPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  // Reset menus when switching conversations
+  // Reset menus and suggestions when switching conversations
   useEffect(() => {
     setStatusMenuOpen(false)
     setPriorityMenuOpen(false)
     setTagInputOpen(false)
     setNewTagValue("")
+    setSuggestions(null)
+    setSuggestionsError(null)
   }, [activeId])
 
   async function loadConversations() {
@@ -225,6 +234,46 @@ export default function MessagesPage() {
     const conv = conversations.find((c) => c.id === activeId)
     if (!conv) return
     updateConversation(activeId, { tags: conv.tags.filter((t) => t !== tag) })
+  }
+
+  // Fetch AI-generated reply suggestions for the active conversation
+  async function fetchSuggestions() {
+    if (!activeId) return
+    const conv = conversations.find((c) => c.id === activeId)
+    if (!conv) return
+
+    setSuggestionsLoading(true)
+    setSuggestionsError(null)
+    setSuggestions(null)
+
+    try {
+      const res = await fetch(`/api/messages/${activeId}/suggest-reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Forward context so mock conversations also get useful suggestions
+        body: JSON.stringify({
+          conversation: conv,
+          messages: messages,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate suggestions")
+      }
+      setSuggestions(data.suggestions || [])
+    } catch (err) {
+      console.error("[v0] suggest-reply failed:", err)
+      setSuggestionsError(err instanceof Error ? err.message : "Failed to load suggestions")
+    } finally {
+      setSuggestionsLoading(false)
+    }
+  }
+
+  function applySuggestion(text: string) {
+    setReply(text)
+    // Keep the suggestions panel open so the agent can still pick another one,
+    // but clear any error.
+    setSuggestionsError(null)
   }
 
   useEffect(() => {
@@ -774,6 +823,68 @@ export default function MessagesPage() {
                     )}
                   </div>
                 )}
+
+                {/* AI suggested replies */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <button
+                      type="button"
+                      onClick={fetchSuggestions}
+                      disabled={suggestionsLoading || messages.length === 0}
+                      className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                    >
+                      {suggestionsLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                      {suggestions ? "Regenerate suggestions" : "Suggest replies"}
+                    </button>
+                    {suggestions && (
+                      <button
+                        type="button"
+                        onClick={() => setSuggestions(null)}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Hide
+                      </button>
+                    )}
+                  </div>
+
+                  {suggestionsError && (
+                    <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      {suggestionsError}
+                    </div>
+                  )}
+
+                  {suggestions && suggestions.length > 0 && (
+                    <div className="space-y-2">
+                      {suggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => applySuggestion(s.text)}
+                          className="w-full text-left bg-card border border-border/60 hover:border-primary/40 hover:bg-primary/5 rounded-lg p-3 transition-all group"
+                        >
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="text-[10px] uppercase tracking-wide font-semibold text-primary">
+                              {s.tone}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">·</span>
+                            <span className="text-[10px] text-muted-foreground">{s.label}</span>
+                            <span className="ml-auto text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                              Click to use
+                            </span>
+                          </div>
+                          <p className="text-xs text-foreground leading-relaxed line-clamp-3">
+                            {s.text}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-end gap-2">
                   <textarea
                     value={reply}
