@@ -12,6 +12,7 @@ import {
   totalSpendInRange,
   computeReturns,
 } from '@/lib/ads/spend'
+import { detectAnomalies, type Anomaly } from '@/lib/ads/anomalies'
 
 export const maxDuration = 30
 
@@ -382,6 +383,14 @@ export async function POST(req: Request) {
       ? Array.from(platformMap.values()).reduce((s, p) => s + p.revenue, 0) / totalAdSpend30d
       : null
 
+  // Anomaly detection — last 7 days vs prior 7 days, per platform
+  const anomalies: Anomaly[] = detectAnomalies(
+    adClicks as any,
+    purchases as any,
+    adSpendRows,
+  )
+  const criticalAnomalies = anomalies.filter((a) => a.severity === "critical")
+
   const hasRealData = totalSessions > 0 || totalPageViews > 0 || inventory.length > 0
   const hasMessaging = conversations.length > 0
 
@@ -438,6 +447,19 @@ export async function POST(req: Request) {
   const SYSTEM_PROMPT = `You are an AI analytics assistant for Dr.Oat SkinCare's e-commerce dashboard. You have full access to real-time business data from Supabase covering storefront analytics, inventory, competitors, and the customer messaging center.
 
 ## Data Source: ${dataSource}
+
+## PRIORITY ALERTS (anomaly detection — last 7d vs prior 7d, paid platforms only)
+${anomalies.length === 0
+  ? "No anomalies detected. All paid platforms are within normal week-over-week variance."
+  : `${anomalies.length} active alert${anomalies.length === 1 ? "" : "s"} (${criticalAnomalies.length} critical):\n` +
+    anomalies
+      .map(
+        (a, i) =>
+          `${i + 1}. [${a.severity.toUpperCase()}] [${a.metric.toUpperCase()}] ${a.message}\n   → Recommendation: ${a.recommendation}`,
+      )
+      .join("\n")}
+
+**Behavior rule for alerts:** If the user opens the conversation with a generic greeting, a "what's up?", "any issues?", "summary", or any open-ended question — and there are active alerts above — proactively surface the most severe alert(s) first before answering anything else. Lead with: "Heads up — I'm flagging X issue(s) this week:" and then summarize the top 1-2 critical ones with the recommendation. Do not bury alerts at the bottom. If the user asks about a specific platform that has an active alert, include the alert in your answer even if they didn't ask about CVR or ROAS specifically.
 
 ### Overview Metrics
 - Total Sessions: ${dashboardData.overview.totalSessions.toLocaleString()}
@@ -531,6 +553,7 @@ ROAS interpretation guidelines (use when making recommendations):
 3. Surface unread/urgent customer messages and recommend response priorities
 4. Provide competitor positioning insights and market trend analysis
 5. Compare ad-platform performance (Facebook, Google, Instagram, TikTok, LINE, etc.) using true ROAS, CPC, CPA, and profit — recommend where to scale or cut spend
+6. Proactively flag week-over-week anomalies (CVR drops > 30%, traffic drops > 40%, ROAS drops > 30%) and recommend root-cause investigation steps
 6. Suggest actionable recommendations grounded in real numbers
 7. Calculate metrics, ratios, and period-over-period comparisons
 8. Explain data patterns, anomalies, and correlations across analytics + messaging + ads

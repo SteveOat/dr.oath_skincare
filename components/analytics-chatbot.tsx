@@ -3,13 +3,43 @@
 import { useState, useRef, useEffect } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
-import { Send, Bot, User, Sparkles, Loader2, X, MessageCircle } from "lucide-react"
+import useSWR from "swr"
+import {
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  Loader2,
+  X,
+  MessageCircle,
+  AlertTriangle,
+} from "lucide-react"
+import type { Anomaly } from "@/lib/ads/anomalies"
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json())
+
+interface AnomaliesResponse {
+  anomalies: Anomaly[]
+  count: number
+  criticalCount: number
+}
 
 export function AnalyticsChatbot() {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  
+
+  // Poll anomalies every 60s — surface fresh alerts without spamming the API
+  const { data: anomalyData } = useSWR<AnomaliesResponse>("/api/anomalies", fetcher, {
+    refreshInterval: 60_000,
+    revalidateOnFocus: true,
+  })
+  const anomalies = anomalyData?.anomalies ?? []
+  const alertCount = anomalies.length
+  const criticalCount = anomalyData?.criticalCount ?? 0
+  const hasAlerts = alertCount > 0
+  const hasCritical = criticalCount > 0
+
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/analytics-chat" }),
   })
@@ -31,14 +61,22 @@ export function AnalyticsChatbot() {
     setInput("")
   }
 
-  const suggestedQuestions = [
+  // Dynamic suggested questions — surface alert-driven prompts first when alerts exist
+  const baseQuestions = [
     "Which platform has the best ROAS?",
     "Which campaigns are unprofitable?",
     "Where should I scale ad spend?",
-    "What's our overall ROAS?",
     "Top campaigns by conversions?",
     "Products to restock?",
   ]
+  const alertQuestions = hasAlerts
+    ? [
+        "What's wrong this week?",
+        ...(anomalies[0] ? [`Why did ${anomalies[0].platform} ${anomalies[0].metric.toUpperCase()} drop?`] : []),
+        "How do I fix the worst-performing platform?",
+      ]
+    : []
+  const suggestedQuestions = [...alertQuestions, ...baseQuestions].slice(0, 6)
 
   return (
     <>
@@ -46,10 +84,38 @@ export function AnalyticsChatbot() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all hover:scale-105 flex items-center justify-center group"
+          aria-label={
+            hasAlerts
+              ? `Open Analytics AI — ${alertCount} alert${alertCount === 1 ? "" : "s"}`
+              : "Open Analytics AI"
+          }
+          className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full text-primary-foreground shadow-lg transition-all hover:scale-105 flex items-center justify-center group ${
+            hasCritical
+              ? "bg-red-600 hover:bg-red-700"
+              : hasAlerts
+                ? "bg-amber-500 hover:bg-amber-600"
+                : "bg-primary hover:bg-primary/90"
+          }`}
         >
           <MessageCircle className="w-6 h-6" />
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background" />
+          {hasAlerts ? (
+            <>
+              {/* Pulsing ring to draw attention */}
+              <span
+                className={`absolute inset-0 rounded-full animate-ping opacity-40 ${
+                  hasCritical ? "bg-red-500" : "bg-amber-400"
+                }`}
+              />
+              {/* Count badge */}
+              <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-background text-foreground border-2 border-background flex items-center justify-center">
+                <span className="text-[10px] font-semibold leading-none">
+                  {alertCount > 9 ? "9+" : alertCount}
+                </span>
+              </span>
+            </>
+          ) : (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background" />
+          )}
         </button>
       )}
 
@@ -76,10 +142,69 @@ export function AnalyticsChatbot() {
             <button
               onClick={() => setIsOpen(false)}
               className="w-8 h-8 rounded-full hover:bg-muted flex items-center justify-center transition-colors"
+              aria-label="Close"
             >
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
+
+          {/* Anomaly Alert Banner */}
+          {hasAlerts && messages.length === 0 && (
+            <div
+              className={`px-4 py-3 border-b ${
+                hasCritical
+                  ? "bg-red-50 border-red-200"
+                  : "bg-amber-50 border-amber-200"
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle
+                  className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+                    hasCritical ? "text-red-600" : "text-amber-600"
+                  }`}
+                />
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-xs font-medium mb-1.5 ${
+                      hasCritical ? "text-red-900" : "text-amber-900"
+                    }`}
+                  >
+                    {alertCount} active alert{alertCount === 1 ? "" : "s"}
+                    {hasCritical ? ` — ${criticalCount} critical` : ""}
+                  </p>
+                  <ul className="space-y-1">
+                    {anomalies.slice(0, 2).map((a, i) => (
+                      <li
+                        key={i}
+                        className={`text-[11px] leading-snug ${
+                          hasCritical ? "text-red-800" : "text-amber-800"
+                        }`}
+                      >
+                        <span className="font-medium capitalize">{a.platform}</span>{" "}
+                        {a.metric.toUpperCase()}{" "}
+                        <span className="font-semibold">
+                          {(a.changePct * 100).toFixed(0)}%
+                        </span>{" "}
+                        WoW
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={() =>
+                      sendMessage({
+                        text: "What anomalies are you flagging this week and what should I do about them?",
+                      })
+                    }
+                    className={`mt-2 text-[11px] font-medium underline-offset-2 hover:underline ${
+                      hasCritical ? "text-red-700" : "text-amber-700"
+                    }`}
+                  >
+                    Ask AI for full diagnosis →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -88,11 +213,15 @@ export function AnalyticsChatbot() {
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
                   <Bot className="w-6 h-6 text-primary" />
                 </div>
-                <h4 className="font-medium text-foreground text-sm mb-1">Ask me anything!</h4>
+                <h4 className="font-medium text-foreground text-sm mb-1">
+                  {hasAlerts ? "I've got news for you" : "Ask me anything!"}
+                </h4>
                 <p className="text-xs text-muted-foreground mb-4">
-                  I have access to your sales, products, inventory, and competitor data.
+                  {hasAlerts
+                    ? "I'm tracking week-over-week anomalies across your ad platforms."
+                    : "I have access to your sales, products, inventory, and competitor data."}
                 </p>
-                
+
                 {/* Quick Questions */}
                 <div className="w-full space-y-2">
                   {suggestedQuestions.map((question, i) => (
@@ -176,6 +305,7 @@ export function AnalyticsChatbot() {
                 type="submit"
                 disabled={isLoading || !input.trim()}
                 className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                aria-label="Send"
               >
                 <Send className="w-4 h-4" />
               </button>
