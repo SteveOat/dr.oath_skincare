@@ -1,14 +1,15 @@
-import { openai } from "@ai-sdk/openai"
-import { generateText, Output, stepCountIs } from "ai"
+import { generateText, Output, stepCountIs, tool } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 
 /**
  * Market Research Agent
  * ---------------------
- * Real AI agent that performs web research using OpenAI's web_search_preview
- * tool (via the Responses API + Vercel AI Gateway). Returns structured insights
- * and source citations, then persists them to Supabase.
+ * Real AI agent that uses the same Vercel AI Gateway routing as the analytics
+ * chatbot (zero-config `openai/gpt-5-mini`). Web search is performed via a
+ * custom tool that wraps Tavily when `TAVILY_API_KEY` is configured, otherwise
+ * the agent falls back to its training data and clearly notes the limitation
+ * in the generated briefing.
  */
 
 const InsightSchema = z.object({
@@ -60,6 +61,96 @@ export type RunResult = {
   error?: string
 }
 
+type CollectedSource = { url: string; title: string }
+
+/**
+ * Build a web-search tool. When `TAVILY_API_KEY` is set, real search is
+ * performed. When not, the tool returns a clear "search disabled" message so
+ * the agent knows to rely on its training data and the user knows to add a
+ * key to enable live research.
+ *
+ * Sources are collected via closure so we can attach them to the final
+ * report.
+ */
+function makeWebSearchTool(collected: CollectedSource[]) {
+  return tool({
+    description:
+      "Search the public web for current news, articles, competitor moves, regulations, and trends. Returns titles, URLs, and short content snippets. Use multiple targeted searches with specific queries (mention brand names, products, dates) rather than vague single queries.",
+    inputSchema: z.object({
+      query: z.string().describe("The search query — be specific."),
+      max_results: z
+        .number()
+        .int()
+        .min(3)
+        .max(8)
+        .default(5)
+        .describe("How many results to return."),
+    }),
+    execute: async ({ query, max_results }) => {
+      const tavilyKey = process.env.TAVILY_API_KEY
+      if (!tavilyKey) {
+        return {
+          ok: false,
+          error:
+            "Live web search is not configured. Add TAVILY_API_KEY to enable real-time research. For this run, rely on your training data and clearly note in the briefing that findings may be outdated.",
+          query,
+          results: [],
+        }
+      }
+
+      try {
+        const res = await fetch("https://api.tavily.com/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            api_key: tavilyKey,
+            query,
+            max_results,
+            search_depth: "basic",
+            include_answer: false,
+            include_raw_content: false,
+          }),
+        })
+
+        if (!res.ok) {
+          return {
+            ok: false,
+            error: `Tavily search failed: ${res.status} ${res.statusText}`,
+            query,
+            results: [],
+          }
+        }
+
+        const data = (await res.json()) as {
+          results?: Array<{ title?: string; url?: string; content?: string }>
+        }
+
+        const results = (data.results || []).map((r) => ({
+          title: r.title || r.url || "Source",
+          url: r.url || "",
+          snippet: (r.content || "").slice(0, 600),
+        }))
+
+        // Side-effect: collect for final source list
+        for (const r of results) {
+          if (r.url && !collected.find((c) => c.url === r.url)) {
+            collected.push({ url: r.url, title: r.title })
+          }
+        }
+
+        return { ok: true, query, results }
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Search request failed",
+          query,
+          results: [],
+        }
+      }
+    },
+  })
+}
+
 /**
  * Run a single research cycle. Creates a `pending` report row immediately so
  * the UI can show progress, then updates it with the AI output (or error).
@@ -103,17 +194,19 @@ export async function runMarketResearch(opts: RunOptions = {}): Promise<RunResul
   const reportId = pending.id as string
   const today = new Date().toISOString().slice(0, 10)
   const topicList = (topics || []).map((t, i) => `${i + 1}. ${t}`).join("\n")
+  const hasLiveSearch = !!process.env.TAVILY_API_KEY
 
   const systemPrompt = `You are a senior market research analyst working for an e-commerce business.
-You have access to live web search. Today's date is ${today}.
+${hasLiveSearch ? "You have access to a live web_search tool." : "Web search is currently DISABLED. Rely on your training data and clearly state in the briefing that some findings may be outdated."}
+Today's date is ${today}.
 
 Your job is to:
-1. Search the web for current news and developments relevant to this business across the assigned topics
-2. Prefer sources from the last 7-14 days
+1. ${hasLiveSearch ? "Run multiple targeted web searches across the topic list" : "Use your training knowledge to summarize what's likely current"}
+2. ${hasLiveSearch ? "Prefer sources from the last 7-14 days" : "Lean on the most stable, well-known industry knowledge"}
 3. Synthesize findings into a structured intelligence briefing
-4. Ground every insight in a real source you found via web search
+4. ${hasLiveSearch ? "Ground every insight in a real source you found via web search" : "Be honest about what you don't know — flag uncertain claims"}
 5. Be specific — name competitors, products, prices, percentages, dates whenever possible
-6. Skip generic advice; only include insights backed by something you actually found online
+6. Skip generic advice; only include insights you can defend
 
 Business context:
 ${businessContext}
@@ -123,22 +216,18 @@ ${topicList || "(no topics configured — use general industry research)"}`
 
   const userPrompt = `Produce today's market research briefing.
 
-Run multiple targeted web searches across the topic list. Then synthesize the findings into the structured report. Cite sources by URL. If a topic returns nothing meaningful, skip it rather than padding.`
+${hasLiveSearch ? "Run multiple targeted web searches across the topic list. Then synthesize the findings into the structured report. If a topic returns nothing meaningful, skip it rather than padding." : "Produce the briefing from your training data. In the executive summary, briefly note that live web search was not available for this run."}`
 
-  let model = "openai/gpt-5-mini"
-  let modelUsed = model
+  const collectedSources: CollectedSource[] = []
+  const modelId = "openai/gpt-5-mini"
 
   try {
     const result = await generateText({
-      // OpenAI Responses API is required for the web_search_preview tool.
-      // The AI Gateway routes this automatically (zero-config for OpenAI).
-      model: openai.responses("gpt-5-mini"),
-      tools: {
-        web_search_preview: openai.tools.webSearchPreview({
-          searchContextSize: "medium",
-        }),
-      },
-      // Allow up to 10 sequential search/synthesis steps
+      // Vercel AI Gateway routing — same zero-config pattern as the chatbot.
+      model: modelId,
+      tools: hasLiveSearch
+        ? { web_search: makeWebSearchTool(collectedSources) }
+        : undefined,
       maxRetries: 1,
       stopWhen: stepCountIs(10),
       system: systemPrompt,
@@ -146,26 +235,19 @@ Run multiple targeted web searches across the topic list. Then synthesize the fi
       experimental_output: Output.object({ schema: ReportSchema }),
     })
 
-    modelUsed = "openai/gpt-5-mini (responses + web_search_preview)"
     const report = result.experimental_output as ResearchReport
 
-    // Extract sources from the response. The OpenAI web_search_preview tool
-    // returns URL citations as `sources` on the result.
-    const sources = (result.sources || [])
-      .filter((s: { sourceType?: string }) => s.sourceType === "url" || !s.sourceType)
-      .map((s: { url?: string; title?: string }) => ({
-        url: s.url || "",
-        title: s.title || s.url || "Source",
-      }))
-      .filter((s) => s.url)
-
-    // Deduplicate sources by URL
+    // Deduplicate sources by URL (already deduped during collection, but be safe)
     const seen = new Set<string>()
-    const uniqueSources = sources.filter((s) => {
+    const uniqueSources = collectedSources.filter((s) => {
       if (seen.has(s.url)) return false
       seen.add(s.url)
       return true
     })
+
+    const modelUsed = hasLiveSearch
+      ? `${modelId} + tavily web search`
+      : `${modelId} (no web search — TAVILY_API_KEY not set)`
 
     await supabase
       .from("market_research_reports")
@@ -203,7 +285,7 @@ Run multiple targeted web searches across the topic list. Then synthesize the fi
       .update({
         status: "failed",
         error: message,
-        model: modelUsed,
+        model: modelId,
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", reportId)
