@@ -28,6 +28,9 @@ export function AnalyticsChatbot() {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [followUps, setFollowUps] = useState<string[]>([])
+  const [followUpsLoading, setFollowUpsLoading] = useState(false)
+  const [followUpsForMessageId, setFollowUpsForMessageId] = useState<string | null>(null)
 
   // Poll anomalies every 60s — surface fresh alerts without spamming the API
   const { data: anomalyData } = useSWR<AnomaliesResponse>("/api/anomalies", fetcher, {
@@ -52,13 +55,75 @@ export function AnalyticsChatbot() {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, followUps])
+
+  // Helper: pull plain text out of a UIMessage's parts array
+  const getMessageText = (msg: (typeof messages)[number]): string =>
+    (msg.parts || [])
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("")
+
+  // Fetch contextual follow-up bubbles after each assistant turn completes
+  useEffect(() => {
+    if (status !== "ready") return
+    if (messages.length === 0) return
+
+    const last = messages[messages.length - 1]
+    if (last.role !== "assistant") return
+    // Already fetched for this message
+    if (followUpsForMessageId === last.id) return
+
+    const lastText = getMessageText(last).trim()
+    if (!lastText) return
+
+    let cancelled = false
+    setFollowUpsLoading(true)
+    setFollowUps([])
+    setFollowUpsForMessageId(last.id)
+
+    const transcript = messages.map((m) => ({
+      role: m.role,
+      content: getMessageText(m),
+    }))
+
+    fetch("/api/analytics-chat/suggestions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: transcript }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        const list: string[] = Array.isArray(data?.suggestions) ? data.suggestions : []
+        setFollowUps(list.slice(0, 3))
+      })
+      .catch(() => {
+        if (!cancelled) setFollowUps([])
+      })
+      .finally(() => {
+        if (!cancelled) setFollowUpsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [status, messages, followUpsForMessageId])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
+    setFollowUps([])
+    setFollowUpsForMessageId(null)
     sendMessage({ text: input })
     setInput("")
+  }
+
+  const handleFollowUpClick = (text: string) => {
+    if (isLoading) return
+    setFollowUps([])
+    setFollowUpsForMessageId(null)
+    sendMessage({ text })
   }
 
   // Dynamic suggested questions — surface alert-driven prompts first when alerts exist
@@ -191,9 +256,9 @@ export function AnalyticsChatbot() {
                   </ul>
                   <button
                     onClick={() =>
-                      sendMessage({
-                        text: "What anomalies are you flagging this week and what should I do about them?",
-                      })
+                      handleFollowUpClick(
+                        "What anomalies are you flagging this week and what should I do about them?",
+                      )
                     }
                     className={`mt-2 text-[11px] font-medium underline-offset-2 hover:underline ${
                       hasCritical ? "text-red-700" : "text-amber-700"
@@ -227,7 +292,7 @@ export function AnalyticsChatbot() {
                   {suggestedQuestions.map((question, i) => (
                     <button
                       key={i}
-                      onClick={() => sendMessage({ text: question })}
+                      onClick={() => handleFollowUpClick(question)}
                       disabled={isLoading}
                       className="w-full text-left px-3 py-2 text-xs bg-muted/50 hover:bg-muted border border-border/50 rounded-lg transition-colors text-foreground disabled:opacity-50"
                     >
@@ -287,6 +352,38 @@ export function AnalyticsChatbot() {
                 </div>
               </div>
             )}
+
+            {/* Contextual follow-up suggestion bubbles — appear after assistant finishes */}
+            {!isLoading && messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
+              <div className="pl-9 space-y-1.5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {followUpsLoading ? (
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    <span>Thinking of follow-ups...</span>
+                  </div>
+                ) : followUps.length > 0 ? (
+                  <>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70 font-medium mb-1">
+                      Continue the conversation
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {followUps.map((q, i) => (
+                        <button
+                          key={`${followUpsForMessageId}-${i}`}
+                          onClick={() => handleFollowUpClick(q)}
+                          disabled={isLoading}
+                          className="group inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] bg-primary/5 hover:bg-primary/10 border border-primary/20 hover:border-primary/40 rounded-full text-foreground/90 hover:text-foreground transition-colors disabled:opacity-50 max-w-full"
+                        >
+                          <Sparkles className="w-2.5 h-2.5 text-primary flex-shrink-0" />
+                          <span className="truncate">{q}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            )}
+
             <div ref={messagesEndRef} />
           </div>
 
