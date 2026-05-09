@@ -31,7 +31,8 @@ import {
   AlertTriangle,
   ChevronRight,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Inbox
 } from "lucide-react"
 
 interface ProductAnalytics {
@@ -386,6 +387,13 @@ export default function AdminDashboard() {
             <span className="text-xs text-muted-foreground hidden sm:block">
               Updated: {lastRefresh.toLocaleTimeString()}
             </span>
+            <a
+              href="/admin/messages"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-card border border-border/60 text-foreground rounded-full text-sm hover:bg-muted/60 transition-colors"
+            >
+              <Inbox className="w-4 h-4" />
+              <span className="hidden sm:inline">Messages</span>
+            </a>
             <button
               onClick={fetchAnalytics}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm hover:bg-primary/90 transition-colors"
