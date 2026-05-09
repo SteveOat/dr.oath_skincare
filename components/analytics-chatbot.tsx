@@ -17,6 +17,11 @@ import {
   Maximize2,
 } from "lucide-react"
 import type { Anomaly } from "@/lib/ads/anomalies"
+import {
+  deriveTitle,
+  newSessionId,
+  saveSession,
+} from "@/lib/chat-history"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -33,6 +38,10 @@ export function AnalyticsChatbot() {
   const [followUps, setFollowUps] = useState<string[]>([])
   const [followUpsLoading, setFollowUpsLoading] = useState(false)
   const [followUpsForMessageId, setFollowUpsForMessageId] = useState<string | null>(null)
+  // Stable session id for the current widget conversation — generated once per mount.
+  const [sessionId] = useState(() => newSessionId())
+  const [sessionCreatedAt] = useState(() => Date.now())
+  const savedForMessageIdRef = useRef<string | null>(null)
 
   // Poll anomalies every 60s — surface fresh alerts without spamming the API
   const { data: anomalyData } = useSWR<AnomaliesResponse>("/api/anomalies", fetcher, {
@@ -65,6 +74,24 @@ export function AnalyticsChatbot() {
       .filter((p): p is { type: "text"; text: string } => p.type === "text")
       .map((p) => p.text)
       .join("")
+
+  // Persist conversation to localStorage after each assistant turn completes
+  useEffect(() => {
+    if (status !== "ready") return
+    if (messages.length === 0) return
+    const last = messages[messages.length - 1]
+    if (last.role !== "assistant") return
+    if (savedForMessageIdRef.current === last.id) return
+    savedForMessageIdRef.current = last.id
+
+    saveSession({
+      id: sessionId,
+      title: deriveTitle(messages),
+      messages,
+      createdAt: sessionCreatedAt,
+      updatedAt: Date.now(),
+    })
+  }, [status, messages])
 
   // Fetch contextual follow-up bubbles after each assistant turn completes
   useEffect(() => {

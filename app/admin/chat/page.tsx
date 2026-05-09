@@ -18,8 +18,20 @@ import {
   Package,
   Users,
   RefreshCw,
+  History,
+  Trash2,
+  MessageSquare,
 } from "lucide-react"
 import type { Anomaly } from "@/lib/ads/anomalies"
+import {
+  type ChatSession,
+  deleteSession,
+  deriveTitle,
+  loadSessions,
+  newSessionId,
+  saveSession,
+  subscribeToSessions,
+} from "@/lib/chat-history"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -35,6 +47,11 @@ export default function FullScreenChatPage() {
   const [followUps, setFollowUps] = useState<string[]>([])
   const [followUpsLoading, setFollowUpsLoading] = useState(false)
   const [followUpsForMessageId, setFollowUpsForMessageId] = useState<string | null>(null)
+  // Chat session persistence — synced with the floating widget via localStorage.
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [sessionId, setSessionId] = useState<string>(() => newSessionId())
+  const [sessionCreatedAt, setSessionCreatedAt] = useState<number>(() => Date.now())
+  const savedForMessageIdRef = useRef<string | null>(null)
 
   const { data: anomaliesData } = useSWR<AnomaliesResponse>(
     "/api/anomalies",
@@ -60,6 +77,34 @@ export default function FullScreenChatPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages, followUps])
+
+  // Load sessions list on mount and subscribe to changes (cross-tab + widget)
+  useEffect(() => {
+    setSessions(loadSessions())
+    const unsubscribe = subscribeToSessions(() => {
+      setSessions(loadSessions())
+    })
+    return unsubscribe
+  }, [])
+
+  // Persist current conversation after each assistant turn completes
+  useEffect(() => {
+    if (status !== "ready") return
+    if (messages.length === 0) return
+    const last = messages[messages.length - 1]
+    if (last.role !== "assistant") return
+    if (savedForMessageIdRef.current === last.id) return
+    savedForMessageIdRef.current = last.id
+
+    const next = saveSession({
+      id: sessionId,
+      title: deriveTitle(messages),
+      messages,
+      createdAt: sessionCreatedAt,
+      updatedAt: Date.now(),
+    })
+    setSessions(next)
+  }, [status, messages, sessionId, sessionCreatedAt])
 
   const getMessageText = (msg: (typeof messages)[number]): string =>
     (msg.parts || [])
@@ -133,6 +178,33 @@ export default function FullScreenChatPage() {
     setFollowUps([])
     setFollowUpsForMessageId(null)
     setInput("")
+    setSessionId(newSessionId())
+    setSessionCreatedAt(Date.now())
+    savedForMessageIdRef.current = null
+  }
+
+  const handleLoadSession = (s: ChatSession) => {
+    if (isLoading) return
+    if (s.id === sessionId) return
+    setMessages(s.messages as never)
+    setSessionId(s.id)
+    setSessionCreatedAt(s.createdAt)
+    setFollowUps([])
+    setFollowUpsForMessageId(null)
+    setInput("")
+    // Mark the latest assistant message as already saved so we don't immediately re-save on load
+    const lastAssistant = [...s.messages].reverse().find((m) => m.role === "assistant")
+    savedForMessageIdRef.current = lastAssistant?.id ?? null
+  }
+
+  const handleDeleteSession = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const next = deleteSession(id)
+    setSessions(next)
+    // If we just deleted the active session, start a fresh one
+    if (id === sessionId) {
+      handleNewChat()
+    }
   }
 
   const categories = [
@@ -272,6 +344,91 @@ export default function FullScreenChatPage() {
               </button>
             </div>
           )}
+
+          {/* Recent chat history */}
+          <div className="bg-card border border-border/50 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <History className="w-3.5 h-3.5 text-primary" />
+                <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                  Recent chats
+                </h3>
+              </div>
+              <span className="text-[10px] text-muted-foreground">
+                {sessions.length}/5
+              </span>
+            </div>
+
+            {sessions.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Your latest 5 conversations will appear here.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {sessions.map((s) => {
+                  const isActive = s.id === sessionId
+                  const date = new Date(s.updatedAt)
+                  const now = new Date()
+                  const isToday =
+                    date.getFullYear() === now.getFullYear() &&
+                    date.getMonth() === now.getMonth() &&
+                    date.getDate() === now.getDate()
+                  const stamp = isToday
+                    ? date.toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : date.toLocaleDateString([], {
+                        month: "short",
+                        day: "numeric",
+                      })
+                  const turns = s.messages.filter((m) => m.role === "user").length
+
+                  return (
+                    <li key={s.id} className="relative group">
+                      <button
+                        onClick={() => handleLoadSession(s)}
+                        disabled={isLoading}
+                        className={`w-full flex items-start gap-2 pl-2 pr-7 py-2 rounded-md text-left transition-colors disabled:opacity-50 ${
+                          isActive
+                            ? "bg-primary/10 hover:bg-primary/15"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        <MessageSquare
+                          className={`w-3 h-3 mt-0.5 flex-shrink-0 ${
+                            isActive ? "text-primary" : "text-muted-foreground"
+                          }`}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-xs leading-tight truncate ${
+                              isActive
+                                ? "text-foreground font-medium"
+                                : "text-foreground/90"
+                            }`}
+                          >
+                            {s.title || deriveTitle(s.messages)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {stamp} · {turns} turn{turns === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteSession(s.id, e)}
+                        aria-label="Delete chat"
+                        title="Delete chat"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus:opacity-100 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-opacity"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
 
           {categories.map((cat) => {
             const Icon = cat.icon
