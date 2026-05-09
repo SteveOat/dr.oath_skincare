@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { sendReplyToChannel } from "@/lib/messaging/router"
+import type { ChannelKey } from "@/lib/messaging/types"
 
 const MOCK_THREADS: Record<string, any[]> = {
   "mock-1": [
@@ -57,48 +59,86 @@ export async function POST(req: Request, { params }: { params: Promise<{ convers
     return NextResponse.json({ error: "Content required" }, { status: 400 })
   }
 
+  const trimmed = content.trim()
   const newMessage = {
     id: `reply-${Date.now()}`,
     conversation_id: conversationId,
     direction: "outbound" as const,
     sender_type: "agent" as const,
     sender_name: "Support Team",
-    content: content.trim(),
+    content: trimmed,
     created_at: new Date().toISOString(),
   }
 
+  // Mock conversations: skip database + external dispatch
   if (conversationId.startsWith("mock-")) {
-    return NextResponse.json({ message: newMessage, usingMock: true })
+    return NextResponse.json({
+      message: newMessage,
+      delivery: { status: "simulated", error: "Mock conversation - no external dispatch" },
+      usingMock: true,
+    })
   }
 
   try {
     const supabase = await createClient()
-    const { data, error } = await supabase
+
+    // 1. Look up the conversation to get channel + customer external id
+    const { data: conversation, error: convErr } = await supabase
+      .from("conversations")
+      .select("id, channel, customer_external_id")
+      .eq("id", conversationId)
+      .single()
+
+    if (convErr || !conversation) {
+      console.error("[v0] conversation lookup failed:", convErr)
+      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    }
+
+    // 2. Dispatch to the per-channel adapter (Facebook / LINE / Instagram / etc)
+    const delivery = await sendReplyToChannel({
+      channel: conversation.channel as ChannelKey,
+      customerExternalId: conversation.customer_external_id,
+      content: trimmed,
+      conversationId,
+    })
+
+    // 3. Persist the outbound message with delivery metadata
+    const { data: inserted, error: insertErr } = await supabase
       .from("customer_messages")
       .insert({
         conversation_id: conversationId,
         direction: "outbound",
         sender_type: "agent",
         sender_name: "Support Team",
-        content: content.trim(),
+        content: trimmed,
+        external_message_id: delivery.externalMessageId || null,
+        metadata: {
+          delivery_status: delivery.status,
+          delivery_error: delivery.error || null,
+        },
       })
       .select()
       .single()
 
-    if (error) throw error
+    if (insertErr) throw insertErr
 
+    // 4. Update conversation summary
     await supabase
       .from("conversations")
       .update({
         last_message_at: new Date().toISOString(),
-        last_message_preview: content.trim().slice(0, 100),
+        last_message_preview: trimmed.slice(0, 100),
         unread_count: 0,
       })
       .eq("id", conversationId)
 
-    return NextResponse.json({ message: data })
+    return NextResponse.json({ message: inserted, delivery })
   } catch (err) {
     console.error("[v0] reply API error:", err)
-    return NextResponse.json({ message: newMessage, usingMock: true })
+    return NextResponse.json({
+      message: newMessage,
+      delivery: { status: "failed", error: err instanceof Error ? err.message : "Unknown error" },
+      usingMock: true,
+    })
   }
 }

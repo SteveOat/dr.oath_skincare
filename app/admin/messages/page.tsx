@@ -81,6 +81,10 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [reply, setReply] = useState("")
   const [sending, setSending] = useState(false)
+  const [deliveryStatus, setDeliveryStatus] = useState<{
+    status: "delivered" | "failed" | "simulated"
+    error?: string
+  } | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
   async function loadConversations() {
@@ -184,13 +188,23 @@ export default function MessagesPage() {
     const text = reply
     setReply("")
     try {
-      await fetch(`/api/messages/${activeId}`, {
+      const res = await fetch(`/api/messages/${activeId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: text }),
       })
+      const data = await res.json().catch(() => ({}))
+      if (data?.delivery) {
+        setDeliveryStatus({
+          status: data.delivery.status,
+          error: data.delivery.error,
+        })
+        // Auto-clear after 4 seconds
+        setTimeout(() => setDeliveryStatus(null), 4000)
+      }
     } catch (err) {
       console.error("[v0] send failed:", err)
+      setDeliveryStatus({ status: "failed", error: "Network error" })
     } finally {
       setSending(false)
       requestAnimationFrame(() => {
@@ -466,6 +480,30 @@ export default function MessagesPage() {
 
               {/* Reply box */}
               <div className="border-t border-border/50 bg-card/40 p-4">
+                {deliveryStatus && (
+                  <div
+                    className={`mb-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2 ${
+                      deliveryStatus.status === "delivered"
+                        ? "bg-green-50 text-green-700 border border-green-200"
+                        : deliveryStatus.status === "simulated"
+                        ? "bg-amber-50 text-amber-700 border border-amber-200"
+                        : "bg-red-50 text-red-700 border border-red-200"
+                    }`}
+                  >
+                    <span className="font-medium capitalize">{deliveryStatus.status}</span>
+                    {deliveryStatus.status === "delivered" && (
+                      <span>
+                        — sent to {CHANNEL_META[activeConv.channel].label}
+                      </span>
+                    )}
+                    {deliveryStatus.status === "simulated" && (
+                      <span>— saved locally (channel API not configured)</span>
+                    )}
+                    {deliveryStatus.status === "failed" && deliveryStatus.error && (
+                      <span>— {deliveryStatus.error}</span>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-end gap-2">
                   <textarea
                     value={reply}
