@@ -278,13 +278,11 @@ export default function MessagesPage() {
 
   useEffect(() => {
     loadConversations()
-    // Poll fallback when not using Supabase realtime (mock data)
-    const interval = setInterval(loadConversations, 15000)
 
-    // Supabase realtime subscription for live message updates
+    // Supabase realtime subscription for live message updates — no polling to avoid flicker.
     const supabase = createClient()
     if (!supabase) {
-      return () => clearInterval(interval)
+      return () => {}
     }
     const channel = supabase
       .channel("messages-stream")
@@ -306,7 +304,6 @@ export default function MessagesPage() {
       .subscribe()
 
     return () => {
-      clearInterval(interval)
       supabase.removeChannel(channel)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

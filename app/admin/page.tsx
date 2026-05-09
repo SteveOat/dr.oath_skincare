@@ -172,8 +172,8 @@ export default function AdminDashboard() {
     }
   }
 
-  const fetchAnalytics = async () => {
-    setLoading(true)
+  const fetchAnalytics = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
     setError(null)
     const supabase = createClient()
     if (!supabase) {
@@ -349,17 +349,12 @@ export default function AdminDashboard() {
     fetchAnalytics()
     fetchUnreadCount()
 
-    // Polling fallback for analytics + unread count
-    const unreadInterval = setInterval(fetchUnreadCount, 10000)
-    const analyticsInterval = setInterval(fetchAnalytics, 30000)
-
-    // Realtime subscription on every analytics table �� instant updates on each click/view/purchase
+    // Realtime subscription on every analytics table — instant updates on each click/view/purchase.
+    // No polling — relying on Supabase realtime + manual Refresh button to avoid the page flashing.
     const supabase = createClient()
     if (!supabase) {
-      return () => {
-        clearInterval(unreadInterval)
-        clearInterval(analyticsInterval)
-      }
+      return () => {}
+    }
     }
     const ANALYTICS_TABLES = [
       "analytics_sessions",
@@ -381,7 +376,7 @@ export default function AdminDashboard() {
           // Briefly flash the "Live" indicator on each insert
           setPulseCount((p) => p + 1)
           if (pulseTimeout) clearTimeout(pulseTimeout)
-          pulseTimeout = setTimeout(() => fetchAnalytics(), 800)
+          pulseTimeout = setTimeout(() => fetchAnalytics({ silent: true }), 800)
         },
       )
     })
@@ -391,8 +386,6 @@ export default function AdminDashboard() {
     })
 
     return () => {
-      clearInterval(unreadInterval)
-      clearInterval(analyticsInterval)
       if (pulseTimeout) clearTimeout(pulseTimeout)
       supabase.removeChannel(channel)
     }
@@ -542,7 +535,7 @@ export default function AdminDashboard() {
               <span className="hidden sm:inline">Messages</span>
             </a>
             <button
-              onClick={fetchAnalytics}
+              onClick={() => fetchAnalytics()}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm hover:bg-primary/90 transition-colors"
             >
               <RefreshCw className="w-4 h-4" />

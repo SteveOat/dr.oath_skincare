@@ -89,8 +89,7 @@ export default function MarketResearchPage() {
 
   useEffect(() => {
     loadAll()
-    const interval = setInterval(loadReports, 15000)
-    return () => clearInterval(interval)
+    // No polling — use the Refresh button to reload reports.
   }, [])
 
   async function loadAll() {

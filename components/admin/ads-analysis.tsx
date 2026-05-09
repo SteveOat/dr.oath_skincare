@@ -222,9 +222,8 @@ export function AdsAnalysis() {
       )
       .subscribe((status) => setIsLive(status === "SUBSCRIBED"))
 
-    const interval = setInterval(load, 30000)
+    // No polling — Supabase realtime above already pushes inserts/updates instantly.
     return () => {
-      clearInterval(interval)
       supabase.removeChannel(channel)
     }
   }, [])
