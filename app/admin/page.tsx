@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { AnalyticsChatbot } from "@/components/analytics-chatbot"
 import { AdsAnalysis } from "@/components/admin/ads-analysis"
+import { YesterdayTakeaway } from "@/components/admin/yesterday-takeaway"
 import { 
   BarChart, 
   Bar, 
@@ -609,6 +610,9 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
+
+            {/* Daily AI Takeaway */}
+            <YesterdayTakeaway />
 
             {/* Inventory Alert */}
             {data?.lowStockCount && data.lowStockCount > 0 && (
