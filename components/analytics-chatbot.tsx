@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import useSWR from "swr"
+import Link from "next/link"
 import {
   Send,
   Bot,
@@ -13,6 +14,7 @@ import {
   X,
   MessageCircle,
   AlertTriangle,
+  Maximize2,
 } from "lucide-react"
 import type { Anomaly } from "@/lib/ads/anomalies"
 
@@ -204,13 +206,24 @@ export function AnalyticsChatbot() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="w-8 h-8 rounded-full hover:bg-muted flex items-center justify-center transition-colors"
-              aria-label="Close"
-            >
-              <X className="w-4 h-4 text-muted-foreground" />
-            </button>
+            <div className="flex items-center gap-1">
+              <Link
+                href="/admin/chat"
+                onClick={() => setIsOpen(false)}
+                className="w-8 h-8 rounded-full hover:bg-muted flex items-center justify-center transition-colors"
+                aria-label="Open in full screen"
+                title="Open in full screen"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
+              </Link>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="w-8 h-8 rounded-full hover:bg-muted flex items-center justify-center transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
           </div>
 
           {/* Anomaly Alert Banner */}
