@@ -355,7 +355,6 @@ export default function AdminDashboard() {
     if (!supabase) {
       return () => {}
     }
-    }
     const ANALYTICS_TABLES = [
       "analytics_sessions",
       "analytics_page_views",
