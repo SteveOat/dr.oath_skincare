@@ -140,6 +140,19 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [activeTab, setActiveTab] = useState<"overview" | "products" | "competitors">("overview")
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await fetch("/api/messages/conversations")
+      const conversations = await response.json()
+      const unread = conversations.filter((c: any) => c.unread_count > 0)
+        .reduce((sum: number, c: any) => sum + c.unread_count, 0)
+      setUnreadCount(unread)
+    } catch (err) {
+      console.error("Failed to fetch unread count:", err)
+    }
+  }
 
   const fetchAnalytics = async () => {
     setLoading(true)
@@ -292,6 +305,10 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchAnalytics()
+    fetchUnreadCount()
+    // Poll for unread count updates every 10 seconds
+    const interval = setInterval(fetchUnreadCount, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   // Create stable display data by merging real data with mock data for empty sections
@@ -389,9 +406,16 @@ export default function AdminDashboard() {
             </span>
             <a
               href="/admin/messages"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-card border border-border/60 text-foreground rounded-full text-sm hover:bg-muted/60 transition-colors"
+              className="relative inline-flex items-center gap-2 px-4 py-2 bg-card border border-border/60 text-foreground rounded-full text-sm hover:bg-muted/60 transition-colors"
             >
-              <Inbox className="w-4 h-4" />
+              <div className="relative">
+                <Inbox className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-2 -right-2 flex items-center justify-center w-5 h-5 text-xs font-semibold text-white bg-red-500 rounded-full">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
               <span className="hidden sm:inline">Messages</span>
             </a>
             <button
