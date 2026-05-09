@@ -192,6 +192,101 @@ export async function trackPurchase(
   }
 }
 
+// Classify ad platform from UTM source / referrer / click ID
+function classifyAdPlatform(opts: {
+  utmSource?: string | null
+  referrer?: string | null
+  clickIdType?: string | null
+}): string {
+  const src = (opts.utmSource || "").toLowerCase()
+  const ref = (opts.referrer || "").toLowerCase()
+  const cid = (opts.clickIdType || "").toLowerCase()
+
+  // Click ID is the most reliable signal
+  if (cid === "fbclid") return "facebook"
+  if (cid === "gclid" || cid === "gbraid" || cid === "wbraid") return "google"
+  if (cid === "ttclid") return "tiktok"
+  if (cid === "msclkid") return "bing"
+  if (cid === "li_fat_id") return "linkedin"
+  if (cid === "twclid") return "twitter"
+
+  const haystack = `${src} ${ref}`
+  if (/(facebook|fb\.com|fb-ads|meta)/.test(haystack)) return "facebook"
+  if (/(instagram|ig-ads|ig\.com)/.test(haystack)) return "instagram"
+  if (/(google|adwords|googleads|doubleclick)/.test(haystack)) return "google"
+  if (/(youtube|yt-ads)/.test(haystack)) return "youtube"
+  if (/(tiktok|tt-ads|bytedance)/.test(haystack)) return "tiktok"
+  if (/(line|line\.me)/.test(haystack)) return "line"
+  if (/(twitter|x\.com|x-ads)/.test(haystack)) return "twitter"
+  if (/(linkedin)/.test(haystack)) return "linkedin"
+  if (/(bing|microsoft)/.test(haystack)) return "bing"
+  if (/(reddit)/.test(haystack)) return "reddit"
+  if (/(pinterest)/.test(haystack)) return "pinterest"
+  if (/(snapchat)/.test(haystack)) return "snapchat"
+
+  if (src) return "other"
+  if (!ref) return "direct"
+  return "organic"
+}
+
+// Capture ad attribution from URL params on first landing per session
+export async function captureAdAttribution() {
+  if (typeof window === "undefined") return
+
+  const sessionId = getSessionId()
+  if (!sessionId) return
+
+  // Only capture once per session
+  const captured = sessionStorage.getItem("analytics_ad_captured")
+  if (captured) return
+
+  const params = new URLSearchParams(window.location.search)
+  const utm_source = params.get("utm_source")
+  const utm_medium = params.get("utm_medium")
+  const utm_campaign = params.get("utm_campaign")
+  const utm_content = params.get("utm_content")
+  const utm_term = params.get("utm_term")
+
+  // Detect ad click IDs
+  let click_id: string | null = null
+  let click_id_type: string | null = null
+  for (const t of ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "msclkid", "li_fat_id", "twclid"]) {
+    const v = params.get(t)
+    if (v) {
+      click_id = v
+      click_id_type = t
+      break
+    }
+  }
+
+  const referrer = document.referrer || null
+  const platform = classifyAdPlatform({ utmSource: utm_source, referrer, clickIdType: click_id_type })
+
+  // Skip if there's nothing meaningful to track and it's not a clear paid platform
+  // (we still log direct/organic to give the dashboard a complete picture)
+  sessionStorage.setItem("analytics_ad_captured", "1")
+
+  const supabase = createClient()
+  try {
+    await supabase.from("analytics_ad_clicks").insert({
+      session_id: sessionId,
+      platform,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
+      click_id,
+      click_id_type,
+      landing_path: window.location.pathname,
+      referrer,
+      query_string: window.location.search || null,
+    })
+  } catch (error) {
+    console.error("[Analytics] Failed to capture ad attribution:", error)
+  }
+}
+
 // Track click events
 export async function trackClick(
   elementType: "button" | "link" | "cta",

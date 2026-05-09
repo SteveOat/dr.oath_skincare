@@ -133,6 +133,7 @@ export async function POST(req: Request) {
     clicksResult,
     conversationsResult,
     customerMessagesResult,
+    adClicksResult,
   ] = await Promise.all([
     supabase.from("analytics_sessions").select("*"),
     supabase.from("analytics_page_views").select("*"),
@@ -144,6 +145,7 @@ export async function POST(req: Request) {
     supabase.from("analytics_clicks").select("*"),
     supabase.from("conversations").select("*"),
     supabase.from("customer_messages").select("id, conversation_id, direction, created_at").order("created_at", { ascending: false }).limit(50),
+    supabase.from("analytics_ad_clicks").select("session_id, platform, utm_campaign, created_at"),
   ])
 
   const sessions = sessionsResult.data || []
@@ -156,6 +158,7 @@ export async function POST(req: Request) {
   const clicks = clicksResult.data || []
   const conversations = conversationsResult.data || []
   const recentMessages = customerMessagesResult.data || []
+  const adClicks = adClicksResult.data || []
 
   // Aggregates
   const totalSessions = sessions.length
@@ -240,7 +243,78 @@ export async function POST(req: Request) {
     revenueChange: revenuePctChange(purchases, 30),
     sessionsChange: pctChange(sessions, 7),
     clicksChange: pctChange(clicks, 7),
+    adClicksChange: pctChange(adClicks, 7),
   }
+
+  // Ads attribution aggregates (NEW)
+  const purchaseSessionSet = new Set(
+    purchases.filter((p) => p.session_id).map((p) => p.session_id as string),
+  )
+  const sessionRevenue = new Map<string, number>()
+  purchases.forEach((p) => {
+    if (p.session_id) {
+      sessionRevenue.set(
+        p.session_id,
+        (sessionRevenue.get(p.session_id) || 0) + (parseFloat(p.order_total) || 0),
+      )
+    }
+  })
+
+  const platformMap = new Map<
+    string,
+    { clicks: number; conversions: number; revenue: number }
+  >()
+  const campaignMap = new Map<
+    string,
+    { platform: string; campaign: string; clicks: number; conversions: number }
+  >()
+  adClicks.forEach((c: any) => {
+    const platform = c.platform || "other"
+    const cur = platformMap.get(platform) || { clicks: 0, conversions: 0, revenue: 0 }
+    cur.clicks++
+    if (purchaseSessionSet.has(c.session_id)) {
+      cur.conversions++
+      cur.revenue += sessionRevenue.get(c.session_id) || 0
+    }
+    platformMap.set(platform, cur)
+
+    if (c.utm_campaign) {
+      const key = `${platform}::${c.utm_campaign}`
+      const cc = campaignMap.get(key) || {
+        platform,
+        campaign: c.utm_campaign,
+        clicks: 0,
+        conversions: 0,
+      }
+      cc.clicks++
+      if (purchaseSessionSet.has(c.session_id)) cc.conversions++
+      campaignMap.set(key, cc)
+    }
+  })
+
+  const totalAdClicks = adClicks.length
+  const paidAdClicks = adClicks.filter(
+    (c: any) => !["direct", "organic"].includes(c.platform),
+  ).length
+
+  const platformBreakdown = Array.from(platformMap.entries())
+    .map(([platform, agg]) => ({
+      platform,
+      clicks: agg.clicks,
+      conversions: agg.conversions,
+      revenue: agg.revenue,
+      cvr: agg.clicks > 0 ? (agg.conversions / agg.clicks) * 100 : 0,
+      share: totalAdClicks > 0 ? (agg.clicks / totalAdClicks) * 100 : 0,
+    }))
+    .sort((a, b) => b.clicks - a.clicks)
+
+  const topAdCampaigns = Array.from(campaignMap.values())
+    .sort((a, b) => b.clicks - a.clicks)
+    .slice(0, 5)
+    .map((c) => ({
+      ...c,
+      cvr: c.clicks > 0 ? (c.conversions / c.clicks) * 100 : 0,
+    }))
 
   const hasRealData = totalSessions > 0 || totalPageViews > 0 || inventory.length > 0
   const hasMessaging = conversations.length > 0
@@ -347,14 +421,40 @@ ${dashboardData.recentPurchases.length > 0
   ? dashboardData.recentPurchases.map((p, i) => `${i + 1}. $${p.total.toFixed(2)} — ${p.items} items — ${p.daysAgo === 0 ? "today" : `${p.daysAgo}d ago`}`).join("\n")
   : "No recent purchases."}
 
+### Ads Attribution & Traffic Sources
+- Total Attributed Clicks: ${totalAdClicks.toLocaleString()}
+- Paid Traffic Share: ${totalAdClicks > 0 ? ((paidAdClicks / totalAdClicks) * 100).toFixed(1) : "0"}% (${paidAdClicks} of ${totalAdClicks})
+- Ad Clicks (last 7d vs prior 7d): ${realTrends.adClicksChange}
+
+Platform breakdown (real-time, attributed via UTM + click IDs like fbclid, gclid, ttclid):
+${platformBreakdown.length > 0
+  ? platformBreakdown
+      .map(
+        (p) =>
+          `- ${p.platform}: ${p.clicks} clicks (${p.share.toFixed(1)}% share), ${p.conversions} conversions, ${p.cvr.toFixed(2)}% CVR, $${p.revenue.toFixed(2)} attributed revenue`,
+      )
+      .join("\n")
+  : "- No ad-attributed traffic captured yet. Storefront tags new visitors with utm_source, utm_campaign, fbclid, gclid, ttclid on landing."}
+
+Top campaigns:
+${topAdCampaigns.length > 0
+  ? topAdCampaigns
+      .map(
+        (c, i) =>
+          `${i + 1}. [${c.platform}] ${c.campaign}: ${c.clicks} clicks, ${c.conversions} conversions, ${c.cvr.toFixed(2)}% CVR`,
+      )
+      .join("\n")
+  : "- No tagged campaigns yet."}
+
 ## Your Capabilities:
 1. Answer questions about sales, revenue, products, inventory, and customer engagement
 2. Analyze CTA click performance and identify which storefront elements drive the most engagement
 3. Surface unread/urgent customer messages and recommend response priorities
 4. Provide competitor positioning insights and market trend analysis
-5. Suggest actionable recommendations grounded in real numbers
-6. Calculate metrics, ratios, and period-over-period comparisons
-7. Explain data patterns, anomalies, and correlations across analytics + messaging
+5. Compare ad-platform performance (Facebook, Google, Instagram, TikTok, LINE, etc.) — recommend where to scale or cut spend based on CVR and attributed revenue
+6. Suggest actionable recommendations grounded in real numbers
+7. Calculate metrics, ratios, and period-over-period comparisons
+8. Explain data patterns, anomalies, and correlations across analytics + messaging + ads
 
 Be concise, data-driven, and actionable. Always cite specific numbers from the data above. Format responses with clear structure using bullet points or numbered lists when appropriate.`
 

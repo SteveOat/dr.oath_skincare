@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { AnalyticsChatbot } from "@/components/analytics-chatbot"
+import { AdsAnalysis } from "@/components/admin/ads-analysis"
 import { 
   BarChart, 
   Bar, 
@@ -149,7 +150,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
-  const [activeTab, setActiveTab] = useState<"overview" | "products" | "competitors">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "products" | "competitors" | "ads">("overview")
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLive, setIsLive] = useState(false)
   const [pulseCount, setPulseCount] = useState(0)
@@ -343,7 +344,7 @@ export default function AdminDashboard() {
     const unreadInterval = setInterval(fetchUnreadCount, 10000)
     const analyticsInterval = setInterval(fetchAnalytics, 30000)
 
-    // Realtime subscription on every analytics table — instant updates on each click/view/purchase
+    // Realtime subscription on every analytics table �� instant updates on each click/view/purchase
     const supabase = createClient()
     const ANALYTICS_TABLES = [
       "analytics_sessions",
@@ -566,6 +567,16 @@ export default function AdminDashboard() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                 </span>
               </span>
+            </button>
+            <button
+              onClick={() => setActiveTab("ads")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "ads"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Ads Analysis
             </button>
           </div>
         </div>
@@ -1207,6 +1218,8 @@ export default function AdminDashboard() {
               </div>
             </div>
           </>
+        ) : activeTab === "ads" ? (
+          <AdsAnalysis />
         ) : null}
       </main>
       
