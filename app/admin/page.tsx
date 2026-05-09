@@ -144,13 +144,16 @@ export default function AdminDashboard() {
 
   const fetchUnreadCount = async () => {
     try {
-      const response = await fetch("/api/messages/conversations")
-      const conversations = await response.json()
-      const unread = conversations.filter((c: any) => c.unread_count > 0)
-        .reduce((sum: number, c: any) => sum + c.unread_count, 0)
+      const response = await fetch("/api/messages/conversations", { cache: "no-store" })
+      const data = await response.json()
+      const conversations = Array.isArray(data) ? data : data.conversations || []
+      const unread = conversations.reduce(
+        (sum: number, c: any) => sum + (Number(c.unread_count) || 0),
+        0,
+      )
       setUnreadCount(unread)
     } catch (err) {
-      console.error("Failed to fetch unread count:", err)
+      console.error("[v0] Failed to fetch unread count:", err)
     }
   }
 
