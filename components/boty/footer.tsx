@@ -9,21 +9,27 @@ const footerLinks = {
     { name: "Serums", href: "/shop?category=serums" },
     { name: "Moisturizers", href: "/shop?category=moisturizers" },
     { name: "Cleansers", href: "/shop?category=cleansers" },
-    { name: "Gift Sets", href: "/shop" }
+    { name: "Gift Sets", href: "/shop" },
   ],
   about: [
-    { name: "Our Story", href: "/" },
-    { name: "Ingredients", href: "/" },
-    { name: "Sustainability", href: "/" },
-    { name: "Press", href: "/" }
+    { name: "Our Story", href: "/about" },
+    { name: "Ingredients", href: "/ingredients" },
+    { name: "Sustainability", href: "/sustainability" },
+    { name: "Press", href: "/press" },
   ],
   support: [
-    { name: "Contact Us", href: "/" },
-    { name: "FAQ", href: "/" },
-    { name: "Shipping", href: "/" },
-    { name: "Returns", href: "/" }
-  ]
+    { name: "Contact Us", href: "/contact" },
+    { name: "FAQ", href: "/faq" },
+    { name: "Shipping", href: "/shipping" },
+    { name: "Returns", href: "/returns" },
+  ],
 }
+
+const socials = [
+  { name: "Instagram", href: "https://instagram.com/droatskincare", icon: Instagram },
+  { name: "Facebook", href: "https://facebook.com/droatskincare", icon: Facebook },
+  { name: "Twitter", href: "https://twitter.com/droatskincare", icon: Twitter },
+]
 
 export function Footer() {
   return (
@@ -34,7 +40,7 @@ export function Footer() {
           Dr.Oat
         </span>
       </div>
-      
+
       <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-16">
           {/* Brand */}
@@ -44,24 +50,18 @@ export function Footer() {
               Natural skincare for those who believe beauty should feel as good as it looks.
             </p>
             <div className="flex gap-4">
-              <span
-                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-foreground/60 boty-shadow"
-                aria-label="Instagram"
-              >
-                <Instagram className="w-4 h-4" />
-              </span>
-              <span
-                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-foreground/60 boty-shadow"
-                aria-label="Facebook"
-              >
-                <Facebook className="w-4 h-4" />
-              </span>
-              <span
-                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-foreground/60 boty-shadow"
-                aria-label="Twitter"
-              >
-                <Twitter className="w-4 h-4" />
-              </span>
+              {socials.map((s) => (
+                <a
+                  key={s.name}
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={s.name}
+                  className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-foreground/60 boty-shadow boty-transition hover:text-foreground hover:scale-110"
+                >
+                  <s.icon className="w-4 h-4" />
+                </a>
+              ))}
             </div>
           </div>
 
@@ -124,10 +124,10 @@ export function Footer() {
               © {new Date().getFullYear()} Dr.Oat SkinCare. All rights reserved.
             </p>
             <div className="flex gap-6">
-              <Link href="/" className="text-sm text-muted-foreground hover:text-foreground boty-transition">
+              <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground boty-transition">
                 Privacy Policy
               </Link>
-              <Link href="/" className="text-sm text-muted-foreground hover:text-foreground boty-transition">
+              <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground boty-transition">
                 Terms of Service
               </Link>
             </div>
