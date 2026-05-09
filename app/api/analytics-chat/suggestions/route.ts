@@ -1,21 +1,24 @@
-import { generateText, Output } from "ai"
-import { z } from "zod"
+import { generateText } from "ai"
 
-export const maxDuration = 15
-
-const SuggestionsSchema = z.object({
-  suggestions: z
-    .array(z.string())
-    .length(3)
-    .describe(
-      "Exactly 3 short follow-up questions the user would naturally ask next, each under 60 characters",
-    ),
-})
+export const maxDuration = 10
 
 interface IncomingMessage {
   role: "user" | "assistant" | "system"
   content: string
 }
+
+const SYSTEM_PROMPT = `You generate exactly 3 short follow-up questions the user would naturally ask next in an analytics conversation about an e-commerce store.
+
+Rules:
+- Each question MUST build directly on what the assistant just said.
+- Be specific: reference exact platforms, products, campaigns, or numbers from the last assistant message.
+- Mix types: drill-down, comparison, action, or scope-shift.
+- Each question under 60 characters.
+- Phrase as natural questions a marketing operator would type.
+- Avoid generic prompts like "tell me more".
+
+Respond with ONLY a JSON array of 3 strings, nothing else. Example:
+["Why is Facebook ROAS dropping?","How does TikTok compare?","Should I pause this campaign?"]`
 
 export async function POST(req: Request) {
   try {
@@ -25,42 +28,46 @@ export async function POST(req: Request) {
       return Response.json({ suggestions: [] })
     }
 
-    // Take last 8 turns to keep token usage low while preserving context
-    const recent = messages.slice(-8)
+    // Only need the last assistant message + last user message for context.
+    // Keeping the prompt tiny is the biggest speed win.
+    const recent = messages.slice(-4)
     const transcript = recent
       .map(
         (m) =>
-          `${m.role === "user" ? "User" : "Assistant"}: ${(m.content || "").slice(0, 600)}`,
+          `${m.role === "user" ? "User" : "Assistant"}: ${(m.content || "").slice(0, 400)}`,
       )
       .join("\n\n")
 
-    const SYSTEM_PROMPT = `You generate 3 short, natural follow-up questions the user would likely ask next in this analytics conversation about an e-commerce store (Dr.Oat SkinCare).
-
-Rules:
-- Each question MUST build directly on what the assistant just said — the user should feel the conversation is continuing, not restarting.
-- Be specific: reference exact platforms, products, campaigns, metrics, or numbers from the assistant's last message when possible.
-- Mix question types: drill-down ("Why?"), comparison ("How does X compare to Y?"), action ("What should I do about X?"), or scope-shift ("What about Y?").
-- Keep each question under 60 characters.
-- Phrase as natural questions a marketing operator would type, not generic suggestions.
-- Avoid repeating questions the user already asked earlier in this conversation.
-- Avoid generic prompts like "tell me more" or "anything else?"
-
-Examples of GOOD follow-ups (notice the specificity):
-- "Why is Facebook ROAS dropping?"
-- "How does TikTok compare to Instagram?"
-- "Should I pause the Spring Sale campaign?"
-- "What's driving the CVR drop on Google?"
-- "Which products convert best from TikTok?"`
-
+    // gpt-4o-mini is consistently 1-2s, vs gpt-5-mini at 8-10s.
+    // No experimental_output / Zod — just parse a plain JSON array, ~3x faster.
     const result = await generateText({
-      model: "openai/gpt-5-mini",
+      model: "openai/gpt-4o-mini",
       system: SYSTEM_PROMPT,
-      prompt: `Conversation so far:\n\n${transcript}\n\nGenerate 3 follow-up questions.`,
-      experimental_output: Output.object({ schema: SuggestionsSchema }),
+      prompt: `Conversation so far:\n\n${transcript}\n\nReturn the JSON array now.`,
     })
 
-    const parsed = result.experimental_output as z.infer<typeof SuggestionsSchema>
-    return Response.json({ suggestions: parsed.suggestions })
+    let suggestions: string[] = []
+    try {
+      // Strip code fences if the model wrapped them
+      const cleaned = result.text
+        .trim()
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/```\s*$/i, "")
+        .trim()
+      const parsed = JSON.parse(cleaned)
+      if (Array.isArray(parsed)) {
+        suggestions = parsed
+          .filter((x): x is string => typeof x === "string")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 3)
+      }
+    } catch {
+      // If parsing fails, just return empty — UI will hide the section.
+      suggestions = []
+    }
+
+    return Response.json({ suggestions })
   } catch (error) {
     console.error("[suggestions]", error)
     return Response.json({ suggestions: [] })

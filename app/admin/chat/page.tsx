@@ -134,10 +134,15 @@ export default function FullScreenChatPage() {
       content: getMessageText(m),
     }))
 
+    // Hard 6s timeout to prevent stuck spinners when the model is slow.
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 6000)
+
     fetch("/api/analytics-chat/suggestions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: transcript }),
+      signal: controller.signal,
     })
       .then((r) => r.json())
       .then((data) => {
@@ -149,11 +154,14 @@ export default function FullScreenChatPage() {
         if (!cancelled) setFollowUps([])
       })
       .finally(() => {
+        clearTimeout(timeoutId)
         if (!cancelled) setFollowUpsLoading(false)
       })
 
     return () => {
       cancelled = true
+      clearTimeout(timeoutId)
+      controller.abort()
     }
   }, [status, messages, followUpsForMessageId])
 

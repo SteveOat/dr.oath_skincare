@@ -116,10 +116,16 @@ export function AnalyticsChatbot() {
       content: getMessageText(m),
     }))
 
+    // Hard 6-second timeout — if the model stalls, we hide the loader rather than
+    // leaving a stuck spinner on screen.
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 6000)
+
     fetch("/api/analytics-chat/suggestions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: transcript }),
+      signal: controller.signal,
     })
       .then((r) => r.json())
       .then((data) => {
@@ -131,11 +137,14 @@ export function AnalyticsChatbot() {
         if (!cancelled) setFollowUps([])
       })
       .finally(() => {
+        clearTimeout(timeoutId)
         if (!cancelled) setFollowUpsLoading(false)
       })
 
     return () => {
       cancelled = true
+      clearTimeout(timeoutId)
+      controller.abort()
     }
   }, [status, messages, followUpsForMessageId])
 
