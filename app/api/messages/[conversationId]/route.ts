@@ -142,3 +142,62 @@ export async function POST(req: Request, { params }: { params: Promise<{ convers
     })
   }
 }
+
+const ALLOWED_STATUS = ["open", "pending", "resolved", "archived"] as const
+const ALLOWED_PRIORITY = ["low", "normal", "high", "urgent"] as const
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ conversationId: string }> }) {
+  const { conversationId } = await params
+  const body = await req.json().catch(() => ({}))
+
+  // Build a sanitized update payload
+  const updates: Record<string, unknown> = {}
+  if (typeof body.status === "string" && ALLOWED_STATUS.includes(body.status)) {
+    updates.status = body.status
+    if (body.status === "resolved") {
+      updates.resolved_at = new Date().toISOString()
+    }
+  }
+  if (typeof body.priority === "string" && ALLOWED_PRIORITY.includes(body.priority)) {
+    updates.priority = body.priority
+  }
+  if (Array.isArray(body.tags)) {
+    const cleanTags = body.tags
+      .filter((t: unknown) => typeof t === "string")
+      .map((t: string) => t.trim())
+      .filter((t: string) => t.length > 0 && t.length <= 32)
+      .slice(0, 12)
+    updates.tags = Array.from(new Set(cleanTags))
+  }
+  if (typeof body.unread_count === "number" && body.unread_count >= 0) {
+    updates.unread_count = body.unread_count
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
+  }
+
+  // Mock conversations: just echo back so UI can update optimistically
+  if (conversationId.startsWith("mock-")) {
+    return NextResponse.json({ updates, usingMock: true })
+  }
+
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("conversations")
+      .update(updates)
+      .eq("id", conversationId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return NextResponse.json({ conversation: data, updates })
+  } catch (err) {
+    console.error("[v0] PATCH conversation error:", err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Update failed" },
+      { status: 500 },
+    )
+  }
+}

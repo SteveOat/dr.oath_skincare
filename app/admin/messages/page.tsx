@@ -17,6 +17,14 @@ import {
   CheckCheck,
   Tag,
   RefreshCw,
+  ChevronDown,
+  Plus,
+  X,
+  Flag,
+  Circle,
+  CheckCircle2,
+  Archive,
+  Clock,
 } from "lucide-react"
 
 type Channel = "facebook" | "line" | "instagram" | "email" | "web"
@@ -60,6 +68,23 @@ const CHANNEL_META: Record<Channel, { label: string; icon: any; color: string; b
   web: { label: "Web Chat", icon: Globe, color: "text-slate-600", bg: "bg-slate-100" },
 }
 
+type Status = Conversation["status"]
+type Priority = Conversation["priority"]
+
+const STATUS_META: Record<Status, { label: string; icon: any; className: string }> = {
+  open: { label: "Open", icon: Circle, className: "bg-blue-100 text-blue-700 border-blue-200" },
+  pending: { label: "Pending", icon: Clock, className: "bg-amber-100 text-amber-700 border-amber-200" },
+  resolved: { label: "Resolved", icon: CheckCircle2, className: "bg-green-100 text-green-700 border-green-200" },
+  archived: { label: "Archived", icon: Archive, className: "bg-slate-200 text-slate-600 border-slate-300" },
+}
+
+const PRIORITY_META: Record<Priority, { label: string; className: string; dot: string }> = {
+  low: { label: "Low", className: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" },
+  normal: { label: "Normal", className: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
+  high: { label: "High", className: "bg-orange-100 text-orange-700 border-orange-200", dot: "bg-orange-500" },
+  urgent: { label: "Urgent", className: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500" },
+}
+
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
   const m = Math.floor(ms / 60000)
@@ -85,7 +110,33 @@ export default function MessagesPage() {
     status: "delivered" | "failed" | "simulated"
     error?: string
   } | null>(null)
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+  const [priorityMenuOpen, setPriorityMenuOpen] = useState(false)
+  const [tagInputOpen, setTagInputOpen] = useState(false)
+  const [newTagValue, setNewTagValue] = useState("")
   const threadRef = useRef<HTMLDivElement>(null)
+  const headerControlsRef = useRef<HTMLDivElement>(null)
+
+  // Close menus on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (headerControlsRef.current && !headerControlsRef.current.contains(e.target as Node)) {
+        setStatusMenuOpen(false)
+        setPriorityMenuOpen(false)
+        setTagInputOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  // Reset menus when switching conversations
+  useEffect(() => {
+    setStatusMenuOpen(false)
+    setPriorityMenuOpen(false)
+    setTagInputOpen(false)
+    setNewTagValue("")
+  }, [activeId])
 
   async function loadConversations() {
     try {
@@ -115,6 +166,65 @@ export default function MessagesPage() {
     } catch (err) {
       console.error("[v0] load thread failed:", err)
     }
+  }
+
+  // Optimistically update conversation status / priority / tags
+  async function updateConversation(
+    id: string,
+    updates: Partial<Pick<Conversation, "status" | "priority" | "tags">>,
+  ) {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+    )
+    try {
+      const res = await fetch(`/api/messages/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok && !id.startsWith("mock-")) {
+        console.error("[v0] update conversation failed:", await res.text())
+        // Reload to revert if the server rejected the change
+        loadConversations()
+      }
+    } catch (err) {
+      console.error("[v0] update conversation error:", err)
+      if (!id.startsWith("mock-")) loadConversations()
+    }
+  }
+
+  function handleStatusChange(status: Status) {
+    if (!activeId) return
+    updateConversation(activeId, { status })
+    setStatusMenuOpen(false)
+  }
+
+  function handlePriorityChange(priority: Priority) {
+    if (!activeId) return
+    updateConversation(activeId, { priority })
+    setPriorityMenuOpen(false)
+  }
+
+  function handleAddTag() {
+    const tag = newTagValue.trim()
+    if (!tag || !activeId) return
+    const conv = conversations.find((c) => c.id === activeId)
+    if (!conv) return
+    if (conv.tags.includes(tag)) {
+      setNewTagValue("")
+      setTagInputOpen(false)
+      return
+    }
+    updateConversation(activeId, { tags: [...conv.tags, tag] })
+    setNewTagValue("")
+    setTagInputOpen(false)
+  }
+
+  function handleRemoveTag(tag: string) {
+    if (!activeId) return
+    const conv = conversations.find((c) => c.id === activeId)
+    if (!conv) return
+    updateConversation(activeId, { tags: conv.tags.filter((t) => t !== tag) })
   }
 
   useEffect(() => {
@@ -422,39 +532,199 @@ export default function MessagesPage() {
           ) : (
             <>
               {/* Thread header */}
-              <div className="border-b border-border/50 bg-card/40 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center font-medium text-sm text-foreground">
-                      {activeConv.customer_name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .slice(0, 2)
-                        .join("")}
+              <div className="border-b border-border/50 bg-card/40 px-6 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center font-medium text-sm text-foreground">
+                        {activeConv.customer_name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .slice(0, 2)
+                          .join("")}
+                      </div>
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full ${CHANNEL_META[activeConv.channel].bg} border-2 border-card flex items-center justify-center`}
+                      >
+                        {(() => {
+                          const Icon = CHANNEL_META[activeConv.channel].icon
+                          return <Icon className={`w-2.5 h-2.5 ${CHANNEL_META[activeConv.channel].color}`} />
+                        })()}
+                      </span>
                     </div>
-                    <span
-                      className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full ${CHANNEL_META[activeConv.channel].bg} border-2 border-card flex items-center justify-center`}
-                    >
-                      {(() => {
-                        const Icon = CHANNEL_META[activeConv.channel].icon
-                        return <Icon className={`w-2.5 h-2.5 ${CHANNEL_META[activeConv.channel].color}`} />
-                      })()}
-                    </span>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-foreground truncate">{activeConv.customer_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        via {CHANNEL_META[activeConv.channel].label} · {activeConv.customer_external_id}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-sm text-foreground">{activeConv.customer_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      via {CHANNEL_META[activeConv.channel].label} · {activeConv.customer_external_id}
-                    </p>
+
+                  {/* Status / Priority / Resolve controls */}
+                  <div ref={headerControlsRef} className="flex items-center gap-2 shrink-0">
+                    {/* Priority dropdown */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPriorityMenuOpen((v) => !v)
+                          setStatusMenuOpen(false)
+                          setTagInputOpen(false)
+                        }}
+                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors hover:opacity-90 ${PRIORITY_META[activeConv.priority].className}`}
+                        aria-haspopup="listbox"
+                        aria-expanded={priorityMenuOpen}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_META[activeConv.priority].dot}`} />
+                        <Flag className="w-3 h-3" />
+                        <span className="font-medium">{PRIORITY_META[activeConv.priority].label}</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                      {priorityMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-20 w-40 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+                          {(Object.keys(PRIORITY_META) as Priority[]).map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => handlePriorityChange(p)}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60 transition-colors ${
+                                activeConv.priority === p ? "bg-muted/40" : ""
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_META[p].dot}`} />
+                              <span className="text-foreground">{PRIORITY_META[p].label}</span>
+                              {activeConv.priority === p && (
+                                <CheckCheck className="w-3 h-3 ml-auto text-primary" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status dropdown */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusMenuOpen((v) => !v)
+                          setPriorityMenuOpen(false)
+                          setTagInputOpen(false)
+                        }}
+                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border transition-colors hover:opacity-90 ${STATUS_META[activeConv.status].className}`}
+                        aria-haspopup="listbox"
+                        aria-expanded={statusMenuOpen}
+                      >
+                        {(() => {
+                          const Icon = STATUS_META[activeConv.status].icon
+                          return <Icon className="w-3 h-3" />
+                        })()}
+                        <span className="font-medium">{STATUS_META[activeConv.status].label}</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                      {statusMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-20 w-40 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+                          {(Object.keys(STATUS_META) as Status[]).map((s) => {
+                            const Icon = STATUS_META[s].icon
+                            return (
+                              <button
+                                key={s}
+                                type="button"
+                                onClick={() => handleStatusChange(s)}
+                                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60 transition-colors ${
+                                  activeConv.status === s ? "bg-muted/40" : ""
+                                }`}
+                              >
+                                <Icon className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-foreground">{STATUS_META[s].label}</span>
+                                {activeConv.status === s && (
+                                  <CheckCheck className="w-3 h-3 ml-auto text-primary" />
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Mark resolved quick action (hidden when already resolved) */}
+                    {activeConv.status !== "resolved" && (
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange("resolved")}
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors font-medium"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span className="hidden md:inline">Resolve</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+
+                {/* Tags row */}
+                <div className="mt-3 flex items-center flex-wrap gap-1.5">
+                  <Tag className="w-3 h-3 text-muted-foreground" />
+                  {activeConv.tags.length === 0 && !tagInputOpen && (
+                    <span className="text-[11px] text-muted-foreground italic">No tags</span>
+                  )}
                   {activeConv.tags.map((t) => (
-                    <span key={t} className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full bg-muted text-muted-foreground">
-                      <Tag className="w-2.5 h-2.5" />
+                    <span
+                      key={t}
+                      className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-muted text-foreground border border-border/60 group"
+                    >
                       {t}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(t)}
+                        className="opacity-60 hover:opacity-100 hover:text-red-600 transition-opacity"
+                        aria-label={`Remove tag ${t}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </span>
                   ))}
+                  {tagInputOpen ? (
+                    <div className="inline-flex items-center gap-1">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={newTagValue}
+                        onChange={(e) => setNewTagValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            handleAddTag()
+                          } else if (e.key === "Escape") {
+                            setTagInputOpen(false)
+                            setNewTagValue("")
+                          }
+                        }}
+                        placeholder="Add tag..."
+                        maxLength={32}
+                        className="text-[11px] px-2 py-0.5 rounded-full bg-card border border-border focus:outline-none focus:ring-2 focus:ring-primary/30 w-28"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddTag}
+                        className="text-[11px] text-primary font-medium hover:underline"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTagInputOpen(true)
+                        setStatusMenuOpen(false)
+                        setPriorityMenuOpen(false)
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Tag
+                    </button>
+                  )}
                 </div>
               </div>
 
