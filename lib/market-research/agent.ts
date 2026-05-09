@@ -1,15 +1,14 @@
-import { generateText, Output, stepCountIs, tool } from "ai"
+import { generateText, Output } from "ai"
+import { xai, type XaiLanguageModelChatOptions } from "@ai-sdk/xai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 
 /**
  * Market Research Agent
  * ---------------------
- * Real AI agent that uses the same Vercel AI Gateway routing as the analytics
- * chatbot (zero-config `openai/gpt-5-mini`). Web search is performed via a
- * custom tool that wraps Tavily when `TAVILY_API_KEY` is configured, otherwise
- * the agent falls back to its training data and clearly notes the limitation
- * in the generated briefing.
+ * Real AI agent powered by xAI Grok with native Live Search (web + news + X).
+ * Search runs server-side at xAI — no Tavily/external search service needed.
+ * Authenticates with `XAI_API_KEY`.
  */
 
 const InsightSchema = z.object({
@@ -64,94 +63,6 @@ export type RunResult = {
 type CollectedSource = { url: string; title: string }
 
 /**
- * Build a web-search tool. When `TAVILY_API_KEY` is set, real search is
- * performed. When not, the tool returns a clear "search disabled" message so
- * the agent knows to rely on its training data and the user knows to add a
- * key to enable live research.
- *
- * Sources are collected via closure so we can attach them to the final
- * report.
- */
-function makeWebSearchTool(collected: CollectedSource[]) {
-  return tool({
-    description:
-      "Search the public web for current news, articles, competitor moves, regulations, and trends. Returns titles, URLs, and short content snippets. Use multiple targeted searches with specific queries (mention brand names, products, dates) rather than vague single queries.",
-    inputSchema: z.object({
-      query: z.string().describe("The search query — be specific."),
-      max_results: z
-        .number()
-        .int()
-        .min(3)
-        .max(8)
-        .default(5)
-        .describe("How many results to return."),
-    }),
-    execute: async ({ query, max_results }) => {
-      const tavilyKey = process.env.TAVILY_API_KEY
-      if (!tavilyKey) {
-        return {
-          ok: false,
-          error:
-            "Live web search is not configured. Add TAVILY_API_KEY to enable real-time research. For this run, rely on your training data and clearly note in the briefing that findings may be outdated.",
-          query,
-          results: [],
-        }
-      }
-
-      try {
-        const res = await fetch("https://api.tavily.com/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            api_key: tavilyKey,
-            query,
-            max_results,
-            search_depth: "basic",
-            include_answer: false,
-            include_raw_content: false,
-          }),
-        })
-
-        if (!res.ok) {
-          return {
-            ok: false,
-            error: `Tavily search failed: ${res.status} ${res.statusText}`,
-            query,
-            results: [],
-          }
-        }
-
-        const data = (await res.json()) as {
-          results?: Array<{ title?: string; url?: string; content?: string }>
-        }
-
-        const results = (data.results || []).map((r) => ({
-          title: r.title || r.url || "Source",
-          url: r.url || "",
-          snippet: (r.content || "").slice(0, 600),
-        }))
-
-        // Side-effect: collect for final source list
-        for (const r of results) {
-          if (r.url && !collected.find((c) => c.url === r.url)) {
-            collected.push({ url: r.url, title: r.title })
-          }
-        }
-
-        return { ok: true, query, results }
-      } catch (err) {
-        return {
-          ok: false,
-          error: err instanceof Error ? err.message : "Search request failed",
-          query,
-          results: [],
-        }
-      }
-    },
-  })
-}
-
-/**
  * Run a single research cycle. Creates a `pending` report row immediately so
  * the UI can show progress, then updates it with the AI output (or error).
  */
@@ -194,60 +105,131 @@ export async function runMarketResearch(opts: RunOptions = {}): Promise<RunResul
   const reportId = pending.id as string
   const today = new Date().toISOString().slice(0, 10)
   const topicList = (topics || []).map((t, i) => `${i + 1}. ${t}`).join("\n")
-  const hasLiveSearch = !!process.env.TAVILY_API_KEY
+  // grok-3 is the most stable Live-Search-capable model.
+  // grok-4.x introduces breaking changes that some accounts don't have access to (returns 410).
+  const searchModelId = "grok-3"
+  const synthModelId = "grok-3"
 
-  const systemPrompt = `You are a senior market research analyst working for an e-commerce business.
-${hasLiveSearch ? "You have access to a live web_search tool." : "Web search is currently DISABLED. Rely on your training data and clearly state in the briefing that some findings may be outdated."}
+  if (!process.env.XAI_API_KEY) {
+    const message =
+      "XAI_API_KEY is not set. Add it in the project's Vars panel — Grok powers the agent's live web search."
+    await supabase
+      .from("market_research_reports")
+      .update({
+        status: "failed",
+        error: message,
+        model: `xai/${searchModelId}`,
+        duration_ms: Date.now() - startedAt,
+      })
+      .eq("id", reportId)
+    await supabase
+      .from("market_research_settings")
+      .update({
+        last_run_at: new Date().toISOString(),
+        last_run_status: "failed",
+        last_run_error: message,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", 1)
+    return { reportId, status: "failed", error: message }
+  }
+
+  // Live Search date window: prefer the last 14 days for "what's new"
+  const now = new Date()
+  const fromDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10)
+  const toDate = now.toISOString().slice(0, 10)
+
+  const searchSystemPrompt = `You are a senior market research analyst with native access to Live Search across the open web, news outlets, and X (Twitter).
 Today's date is ${today}.
-
-Your job is to:
-1. ${hasLiveSearch ? "Run multiple targeted web searches across the topic list" : "Use your training knowledge to summarize what's likely current"}
-2. ${hasLiveSearch ? "Prefer sources from the last 7-14 days" : "Lean on the most stable, well-known industry knowledge"}
-3. Synthesize findings into a structured intelligence briefing
-4. ${hasLiveSearch ? "Ground every insight in a real source you found via web search" : "Be honest about what you don't know — flag uncertain claims"}
-5. Be specific — name competitors, products, prices, percentages, dates whenever possible
-6. Skip generic advice; only include insights you can defend
 
 Business context:
 ${businessContext}
 
-Research topics for today's briefing:
-${topicList || "(no topics configured — use general industry research)"}`
+Research topics:
+${topicList || "(no topics configured — use general industry research)"}
 
-  const userPrompt = `Produce today's market research briefing.
+Your task right now: gather the most material, recent (last 14 days) intelligence across these topics. Write a thorough markdown research brief covering:
+- Competitor moves (launches, pricing, marketing pivots)
+- Industry trend shifts (ingredients, regulations, consumer demand)
+- Channel insights (which platforms are buzzing right now)
+- Concrete opportunities and risks
 
-${hasLiveSearch ? "Run multiple targeted web searches across the topic list. Then synthesize the findings into the structured report. If a topic returns nothing meaningful, skip it rather than padding." : "Produce the briefing from your training data. In the executive summary, briefly note that live web search was not available for this run."}`
+Be specific — name competitors, products, prices, percentages, dates wherever possible. Cite sources inline. Skip topics that returned nothing meaningful rather than padding. Aim for 400-800 words of dense, source-backed analysis.`
 
-  const collectedSources: CollectedSource[] = []
-  const modelId = "openai/gpt-5-mini"
+  const searchUserPrompt = `Run live searches and produce today's market research briefing.`
 
   try {
-    const result = await generateText({
-      // Vercel AI Gateway routing — same zero-config pattern as the chatbot.
-      model: modelId,
-      tools: hasLiveSearch
-        ? { web_search: makeWebSearchTool(collectedSources) }
-        : undefined,
+    // STEP 1 — Live Search + free-form research
+    // Live Search returns sources via providerOptions.xai.searchParameters
+    const research = await generateText({
+      model: xai(searchModelId),
+      system: searchSystemPrompt,
+      prompt: searchUserPrompt,
       maxRetries: 1,
-      stopWhen: stepCountIs(10),
-      system: systemPrompt,
-      prompt: userPrompt,
+      providerOptions: {
+        xai: {
+          searchParameters: {
+            mode: "on",
+            returnCitations: true,
+            maxSearchResults: 20,
+            fromDate,
+            toDate,
+            sources: [
+              { type: "web", safeSearch: true },
+              { type: "news", safeSearch: true },
+              { type: "x", postFavoriteCount: 50 },
+            ],
+          },
+        } satisfies XaiLanguageModelChatOptions,
+      },
+    })
+
+    const rawBriefing = research.text
+
+    // Extract real source URLs from Grok Live Search citations, deduplicated
+    const collectedSources: CollectedSource[] = []
+    const seen = new Set<string>()
+    for (const s of research.sources || []) {
+      if (s.sourceType === "url" && s.url && !seen.has(s.url)) {
+        seen.add(s.url)
+        let title = s.title
+        if (!title) {
+          try {
+            title = new URL(s.url).hostname
+          } catch {
+            title = s.url
+          }
+        }
+        collectedSources.push({ url: s.url, title })
+      }
+    }
+
+    // STEP 2 — Structure the free-form briefing into the report schema
+    const sourceLines =
+      collectedSources.length > 0
+        ? collectedSources
+            .map((s, i) => `${i + 1}. ${s.title} — ${s.url}`)
+            .join("\n")
+        : "(no sources collected from Live Search)"
+
+    const synth = await generateText({
+      model: xai(synthModelId),
+      system: `You convert a free-form market research briefing into a structured JSON report. Preserve every concrete fact, name, price, and date from the source material. Reference sources by URL when relevant.`,
+      prompt: `Source briefing (with embedded citations):
+
+${rawBriefing}
+
+Sources discovered during Live Search:
+${sourceLines}
+
+Convert this into the structured report. Insights should be the 3-8 most material findings ordered by relevance. Recommendations should be 2-5 concrete actions the business should take this week.`,
+      maxRetries: 1,
       experimental_output: Output.object({ schema: ReportSchema }),
     })
 
-    const report = result.experimental_output as ResearchReport
-
-    // Deduplicate sources by URL (already deduped during collection, but be safe)
-    const seen = new Set<string>()
-    const uniqueSources = collectedSources.filter((s) => {
-      if (seen.has(s.url)) return false
-      seen.add(s.url)
-      return true
-    })
-
-    const modelUsed = hasLiveSearch
-      ? `${modelId} + tavily web search`
-      : `${modelId} (no web search — TAVILY_API_KEY not set)`
+    const report = synth.experimental_output as ResearchReport
 
     await supabase
       .from("market_research_reports")
@@ -258,9 +240,9 @@ ${hasLiveSearch ? "Run multiple targeted web searches across the topic list. The
         insights: report.insights,
         recommendations: report.recommendations,
         topics: report.topics,
-        sources: uniqueSources,
-        raw_text: result.text || null,
-        model: modelUsed,
+        sources: collectedSources,
+        raw_text: rawBriefing || null,
+        model: `xai/${searchModelId} + Live Search`,
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", reportId)
@@ -277,7 +259,22 @@ ${hasLiveSearch ? "Run multiple targeted web searches across the topic list. The
 
     return { reportId, status: "success" }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error"
+    const rawMessage = error instanceof Error ? error.message : "Unknown error"
+    // Detect common xAI auth/credit failures and surface a more actionable message.
+    let message = rawMessage
+    const lower = rawMessage.toLowerCase()
+    if (
+      lower.includes("incorrect api key") ||
+      lower.includes("bad credentials") ||
+      lower.includes("invalid api key") ||
+      lower.includes("unauthenticated")
+    ) {
+      message = `Your XAI_API_KEY is invalid. xAI keys start with "xai-" and come from https://console.x.ai. Update the value in the project's Vars panel and try again. (xAI said: ${rawMessage})`
+    } else if (lower.includes("gone") || lower.includes("410")) {
+      message = `xAI rejected the request — your account may not have access to model "${searchModelId}", or your API key is invalid. Verify the key at https://console.x.ai. (raw: ${rawMessage})`
+    } else if (lower.includes("insufficient") && lower.includes("credit")) {
+      message = `Your xAI account is out of credits. Top up at https://console.x.ai. (raw: ${rawMessage})`
+    }
     console.error("[market-research] Agent failed:", message)
 
     await supabase
@@ -285,7 +282,7 @@ ${hasLiveSearch ? "Run multiple targeted web searches across the topic list. The
       .update({
         status: "failed",
         error: message,
-        model: modelId,
+        model: `xai/${searchModelId}`,
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", reportId)
