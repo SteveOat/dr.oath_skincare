@@ -154,8 +154,7 @@ export default function AdminDashboard() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [activeTab, setActiveTab] = useState<"overview" | "products" | "competitors" | "ads">("overview")
   const [unreadCount, setUnreadCount] = useState(0)
-  const [isLive, setIsLive] = useState(false)
-  const [pulseCount, setPulseCount] = useState(0)
+
 
   const fetchUnreadCount = async () => {
     try {
@@ -346,48 +345,10 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
+    // Manual refresh only — no polling, no realtime subscriptions.
+    // Use the Refresh button in the header to reload analytics on demand.
     fetchAnalytics()
     fetchUnreadCount()
-
-    // Realtime subscription on every analytics table — instant updates on each click/view/purchase.
-    // No polling — relying on Supabase realtime + manual Refresh button to avoid the page flashing.
-    const supabase = createClient()
-    if (!supabase) {
-      return () => {}
-    }
-    const ANALYTICS_TABLES = [
-      "analytics_sessions",
-      "analytics_page_views",
-      "analytics_product_views",
-      "analytics_cart_events",
-      "analytics_purchases",
-      "analytics_clicks",
-    ]
-
-    let pulseTimeout: ReturnType<typeof setTimeout> | null = null
-    const channel = supabase.channel("dashboard-analytics-stream")
-
-    ANALYTICS_TABLES.forEach((table) => {
-      channel.on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table },
-        () => {
-          // Briefly flash the "Live" indicator on each insert
-          setPulseCount((p) => p + 1)
-          if (pulseTimeout) clearTimeout(pulseTimeout)
-          pulseTimeout = setTimeout(() => fetchAnalytics({ silent: true }), 800)
-        },
-      )
-    })
-
-    channel.subscribe((status) => {
-      setIsLive(status === "SUBSCRIBED")
-    })
-
-    return () => {
-      if (pulseTimeout) clearTimeout(pulseTimeout)
-      supabase.removeChannel(channel)
-    }
   }, [])
 
   // Create stable display data by merging real data with mock data for empty sections
@@ -478,35 +439,9 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {isUsingMockData ? (
+            {isUsingMockData && (
               <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
                 Demo Data
-              </span>
-            ) : (
-              <span
-                key={pulseCount}
-                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-colors ${
-                  isLive
-                    ? "bg-green-50 text-green-700 border-green-200"
-                    : "bg-muted text-muted-foreground border-border/60"
-                }`}
-                aria-live="polite"
-              >
-                <span
-                  className={`relative flex h-2 w-2 ${isLive ? "animate-pulse" : ""}`}
-                >
-                  <span
-                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                      isLive ? "bg-green-400 animate-ping" : "bg-muted-foreground"
-                    }`}
-                  />
-                  <span
-                    className={`relative inline-flex rounded-full h-2 w-2 ${
-                      isLive ? "bg-green-500" : "bg-muted-foreground"
-                    }`}
-                  />
-                </span>
-                {isLive ? "Live" : "Connecting"}
               </span>
             )}
             <span className="text-xs text-muted-foreground hidden sm:block">

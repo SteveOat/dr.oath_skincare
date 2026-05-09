@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
 import {
   ArrowLeft,
   Search,
@@ -277,37 +276,9 @@ export default function MessagesPage() {
   }
 
   useEffect(() => {
+    // Manual refresh only — no polling, no realtime subscriptions.
     loadConversations()
-
-    // Supabase realtime subscription for live message updates — no polling to avoid flicker.
-    const supabase = createClient()
-    if (!supabase) {
-      return () => {}
-    }
-    const channel = supabase
-      .channel("messages-stream")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "conversations" },
-        () => loadConversations(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "customer_messages" },
-        (payload: any) => {
-          if (payload?.new?.conversation_id === activeId) {
-            loadThread(activeId)
-          }
-          loadConversations()
-        },
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId])
+  }, [])
 
   useEffect(() => {
     if (activeId) loadThread(activeId)

@@ -21,6 +21,7 @@ import {
   Trash2,
   X,
   Wallet,
+  RefreshCw,
 } from "lucide-react"
 import {
   type AdSpendRow,
@@ -134,8 +135,7 @@ export function AdsAnalysis() {
   const [loading, setLoading] = useState(true)
   const [usingMock, setUsingMock] = useState(false)
   const [range, setRange] = useState<"24h" | "7d" | "30d" | "all">("7d")
-  const [isLive, setIsLive] = useState(false)
-  const [pulse, setPulse] = useState(0)
+
   const [spendOpen, setSpendOpen] = useState(false)
 
   async function load() {
@@ -194,38 +194,8 @@ export function AdsAnalysis() {
   }
 
   useEffect(() => {
+    // Manual refresh only — load once on mount, no polling, no realtime subscriptions.
     load()
-    const supabase = createClient()
-    if (!supabase) {
-      const interval = setInterval(load, 30000)
-      return () => clearInterval(interval)
-    }
-    const channel = supabase
-      .channel("ads-analysis-stream")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "analytics_ad_clicks" },
-        () => {
-          setPulse((p) => p + 1)
-          load()
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "analytics_purchases" },
-        () => load(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "analytics_ad_spend" },
-        () => load(),
-      )
-      .subscribe((status) => setIsLive(status === "SUBSCRIBED"))
-
-    // No polling — Supabase realtime above already pushes inserts/updates instantly.
-    return () => {
-      supabase.removeChannel(channel)
-    }
   }, [])
 
   // Range bounds (used both for filtering clicks and prorating spend)
@@ -424,28 +394,15 @@ export function AdsAnalysis() {
               Demo Data
             </span>
           )}
-          <span
-            key={pulse}
-            className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-colors ${
-              isLive
-                ? "bg-green-50 text-green-700 border-green-200"
-                : "bg-muted text-muted-foreground border-border/60"
-            }`}
+          <button
+            type="button"
+            onClick={() => load()}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border bg-muted hover:bg-muted/80 text-muted-foreground border-border/60 transition-colors"
+            aria-label="Refresh ads data"
           >
-            <span className="relative flex h-2 w-2">
-              <span
-                className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  isLive ? "bg-green-400 animate-ping" : "bg-muted-foreground"
-                }`}
-              />
-              <span
-                className={`relative inline-flex rounded-full h-2 w-2 ${
-                  isLive ? "bg-green-500" : "bg-muted-foreground"
-                }`}
-              />
-            </span>
-            {isLive ? "Live" : "Connecting"}
-          </span>
+            <RefreshCw className="w-3 h-3" />
+            Refresh
+          </button>
           <button
             onClick={() => setSpendOpen(true)}
             className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
