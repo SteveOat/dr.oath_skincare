@@ -140,6 +140,15 @@ export function AdsAnalysis() {
 
   async function load() {
     const supabase = createClient()
+    if (!supabase) {
+      // Supabase env not available — fall back to mock data so the dashboard still demos
+      setAdClicks(MOCK_AD_CLICKS)
+      setPurchases(MOCK_PURCHASES)
+      setSpendRows(MOCK_SPEND)
+      setUsingMock(true)
+      setLoading(false)
+      return
+    }
     try {
       const [clicksRes, purchasesRes, spendRes] = await Promise.all([
         supabase
@@ -187,6 +196,10 @@ export function AdsAnalysis() {
   useEffect(() => {
     load()
     const supabase = createClient()
+    if (!supabase) {
+      const interval = setInterval(load, 30000)
+      return () => clearInterval(interval)
+    }
     const channel = supabase
       .channel("ads-analysis-stream")
       .on(

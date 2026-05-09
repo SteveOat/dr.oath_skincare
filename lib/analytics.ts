@@ -46,6 +46,7 @@ function getDeviceInfo() {
 // Initialize or update session
 export async function initSession() {
   const supabase = createClient()
+  if (!supabase) return
   const sessionId = getSessionId()
   const deviceInfo = getDeviceInfo()
   
@@ -87,6 +88,7 @@ export async function initSession() {
 // Track page view
 export async function trackPageView(pagePath?: string, pageTitle?: string) {
   const supabase = createClient()
+  if (!supabase) return
   const sessionId = getSessionId()
   
   if (!sessionId) return
@@ -116,6 +118,7 @@ export async function trackProductView(product: {
   category?: string
 }) {
   const supabase = createClient()
+  if (!supabase) return
   const sessionId = getSessionId()
   
   if (!sessionId) return
@@ -146,6 +149,7 @@ export async function trackCartEvent(
   cartTotal: number
 ) {
   const supabase = createClient()
+  if (!supabase) return
   const sessionId = getSessionId()
   
   if (!sessionId) return
@@ -176,6 +180,7 @@ export async function trackPurchase(
   }>
 ) {
   const supabase = createClient()
+  if (!supabase) return
   const sessionId = getSessionId()
   
   if (!sessionId) return
@@ -267,6 +272,7 @@ export async function captureAdAttribution() {
   sessionStorage.setItem("analytics_ad_captured", "1")
 
   const supabase = createClient()
+  if (!supabase) return
   try {
     await supabase.from("analytics_ad_clicks").insert({
       session_id: sessionId,
@@ -294,6 +300,7 @@ export async function trackClick(
   elementId?: string
 ) {
   const supabase = createClient()
+  if (!supabase) return
   const sessionId = getSessionId()
   
   if (!sessionId) return

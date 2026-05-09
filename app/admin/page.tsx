@@ -176,6 +176,13 @@ export default function AdminDashboard() {
     setLoading(true)
     setError(null)
     const supabase = createClient()
+    if (!supabase) {
+      setError(
+        "Supabase env vars not available in the browser. Re-save NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in the project's Vars panel and reload.",
+      )
+      setLoading(false)
+      return
+    }
 
     try {
       // Fetch all analytics data in parallel
@@ -348,6 +355,12 @@ export default function AdminDashboard() {
 
     // Realtime subscription on every analytics table �� instant updates on each click/view/purchase
     const supabase = createClient()
+    if (!supabase) {
+      return () => {
+        clearInterval(unreadInterval)
+        clearInterval(analyticsInterval)
+      }
+    }
     const ANALYTICS_TABLES = [
       "analytics_sessions",
       "analytics_page_views",

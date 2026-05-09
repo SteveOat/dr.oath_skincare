@@ -283,6 +283,9 @@ export default function MessagesPage() {
 
     // Supabase realtime subscription for live message updates
     const supabase = createClient()
+    if (!supabase) {
+      return () => clearInterval(interval)
+    }
     const channel = supabase
       .channel("messages-stream")
       .on(
