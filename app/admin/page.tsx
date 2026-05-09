@@ -33,8 +33,9 @@ import {
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
-  Inbox
-} from "lucide-react"
+  Inbox,
+  Sparkles
+  } from "lucide-react"
 
 interface ProductAnalytics {
   product_id: string
@@ -505,6 +506,13 @@ export default function AdminDashboard() {
             <span className="text-xs text-muted-foreground hidden sm:block">
               Updated: {lastRefresh.toLocaleTimeString()}
             </span>
+            <a
+              href="/admin/market-research"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-card border border-border/60 text-foreground rounded-full text-sm hover:bg-muted/60 transition-colors"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span className="hidden sm:inline">Research</span>
+            </a>
             <a
               href="/admin/messages"
               className="relative inline-flex items-center gap-2 px-4 py-2 bg-card border border-border/60 text-foreground rounded-full text-sm hover:bg-muted/60 transition-colors"
