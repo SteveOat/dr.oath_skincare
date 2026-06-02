@@ -63,7 +63,7 @@ export type RunResult = {
 
 type CollectedSource = { url: string; title: string }
 
-const XAI_MODEL_ID = "grok-4.3-latest"
+const XAI_MODEL_ID = "latest"
 const XAI_MODEL_LABEL = `xai/${XAI_MODEL_ID}`
 
 export async function runMarketResearch(opts: RunOptions = {}): Promise<RunResult> {
