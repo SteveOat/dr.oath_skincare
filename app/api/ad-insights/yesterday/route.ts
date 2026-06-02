@@ -132,7 +132,7 @@ ROAS interpretation:
 Pick the most important story (best or worst platform/campaign, big swing vs baseline, or overall ROAS health) and produce the JSON output.`
 
     const result = await generateText({
-      model: xai("grok-4.3"),
+      model: xai("grok-4.3-latest"),
       output: Output.object({ schema: insightSchema }),
       prompt,
       maxRetries: 1,
@@ -149,7 +149,7 @@ Pick the most important story (best or worst platform/campaign, big swing vs bas
       key_metric_value: insight.keyMetricValue,
       sentiment: insight.sentiment,
       snapshot,
-      model: "xai/grok-4.3",
+      model: "xai/grok-4.3-latest",
     }
 
     const { data: saved, error: saveError } = await supabase

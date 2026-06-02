@@ -562,7 +562,7 @@ ROAS interpretation guidelines (use when making recommendations):
 Be concise, data-driven, and actionable. Always cite specific numbers from the data above. Format responses with clear structure using bullet points or numbered lists when appropriate.`
 
   const result = streamText({
-    model: xai("grok-4.3"),
+    model: xai("grok-4.3-latest"),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     abortSignal: req.signal,
