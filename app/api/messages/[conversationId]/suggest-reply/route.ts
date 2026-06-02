@@ -134,7 +134,7 @@ Generate 3 reply drafts the agent could send next.`
 
     try {
       const result = await generateText({
-        model: xai("grok-4-latest"),
+        model: xai("grok-3-latest"),
         system: systemPrompt,
         prompt: userPrompt,
         output: Output.object({ schema: SuggestionsSchema }),

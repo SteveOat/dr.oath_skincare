@@ -63,7 +63,7 @@ export type RunResult = {
 
 type CollectedSource = { url: string; title: string }
 
-const XAI_MODEL_ID = "grok-4-latest"
+const XAI_MODEL_ID = "grok-3-latest"
 const XAI_MODEL_LABEL = `xai/${XAI_MODEL_ID}`
 
 export async function runMarketResearch(opts: RunOptions = {}): Promise<RunResult> {
@@ -240,7 +240,7 @@ Convert this into the structured report. Insights should be the 3-8 most materia
     ) {
       message = `xAI rejected the request — your XAI_API_KEY may be invalid. (raw: ${rawMessage})`
     } else if (lower.includes("gone") || lower.includes("410")) {
-      message = `xAI returned 410 Gone — model "${XAI_MODEL_ID}" may have been deprecated. Check current model names at https://docs.x.ai/developers/models/grok-4. (raw: ${rawMessage})`
+      message = `xAI returned 410 Gone — model "${XAI_MODEL_ID}" may have been deprecated. Check current model names at https://docs.x.ai/developers/models. (raw: ${rawMessage})`
     } else if (lower.includes("insufficient") && lower.includes("credit")) {
       message = `Your xAI account is out of credits. Top up at https://console.x.ai. (raw: ${rawMessage})`
     } else if (lower.includes("rate limit") || lower.includes("429")) {

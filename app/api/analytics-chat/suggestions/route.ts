@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
     // Keep this as plain JSON parsing instead of structured output to minimize latency.
     const result = await generateText({
-      model: xai("grok-4-latest"),
+      model: xai("grok-3-latest"),
       system: SYSTEM_PROMPT,
       prompt: `Conversation so far:\n\n${transcript}\n\nReturn the JSON array now.`,
     })
