@@ -17,6 +17,7 @@ import {
   Maximize2,
 } from "lucide-react"
 import type { Anomaly } from "@/lib/ads/anomalies"
+import { MarkdownText } from "@/components/markdown-text"
 import {
   deriveTitle,
   newSessionId,
@@ -374,16 +375,7 @@ export function AnalyticsChatbot() {
                         : "bg-muted text-foreground"
                     }`}
                   >
-                    {message.parts.map((part, index) => {
-                      if (part.type === "text") {
-                        return (
-                          <div key={index} className="text-xs whitespace-pre-wrap leading-relaxed">
-                            {part.text}
-                          </div>
-                        )
-                      }
-                      return null
-                    })}
+                    <MarkdownText text={getMessageText(message)} className="text-xs leading-relaxed" />
                   </div>
                 </div>
               ))

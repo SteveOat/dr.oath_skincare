@@ -23,6 +23,7 @@ import {
   MessageSquare,
 } from "lucide-react"
 import type { Anomaly } from "@/lib/ads/anomalies"
+import { MarkdownText } from "@/components/markdown-text"
 import {
   type ChatSession,
   deleteSession,
@@ -526,13 +527,7 @@ export default function FullScreenChatPage() {
                         : "bg-muted text-foreground"
                     }`}
                   >
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                      {message.parts?.map((part, i) =>
-                        part.type === "text" ? (
-                          <span key={i}>{part.text}</span>
-                        ) : null,
-                      )}
-                    </div>
+                    <MarkdownText text={getMessageText(message)} className="text-sm leading-relaxed" />
                   </div>
                 </div>
               ))

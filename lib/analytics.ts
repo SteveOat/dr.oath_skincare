@@ -101,10 +101,8 @@ export async function trackPageView(pagePath?: string, pageTitle?: string) {
       referrer: document.referrer || null,
     })
     
-    // Increment session page views
-    await supabase.rpc("increment_page_views", { sid: sessionId }).catch(() => {
-      // RPC might not exist, ignore error
-    })
+    // Increment session page views; this RPC is optional in some deployments.
+    await supabase.rpc("increment_page_views", { sid: sessionId })
   } catch (error) {
     console.error("[Analytics] Failed to track page view:", error)
   }
