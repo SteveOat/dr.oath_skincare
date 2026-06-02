@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState } from "react"
 import { AnalyticsChatbot } from "@/components/analytics-chatbot"
@@ -78,73 +78,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   oils: "#C4D4C4",
   masks: "#7A8B7A",
   toners: "#6D7D6D"
-}
-
-// Mock data for demo purposes
-const MOCK_DATA: AnalyticsData = {
-  totalSessions: 2847,
-  totalPageViews: 12459,
-  totalProductViews: 8234,
-  totalCartEvents: 1456,
-  totalPurchases: 342,
-  totalRevenue: 28945.50,
-  totalClicks: 5824,
-  topClicks: [
-    { label: "Hero — Shop Now", count: 1247 },
-    { label: "Nav — Cart", count: 892 },
-    { label: "Product — Add to Cart", count: 743 },
-    { label: "Cart — Checkout", count: 412 },
-    { label: "Grid — Quick Add", count: 387 }
-  ],
-  pageViewsByPath: [
-    { path: "/", count: 4521 },
-    { path: "/shop", count: 3892 },
-    { path: "/product/radiance-serum", count: 1245 },
-    { path: "/product/hydra-glow-moisturizer", count: 987 },
-    { path: "/product/gentle-foam-cleanser", count: 814 }
-  ],
-  topProducts: [
-    { name: "Radiance Serum", views: 1245 },
-    { name: "Hydra Glow Moisturizer", views: 987 },
-    { name: "Gentle Foam Cleanser", views: 814 },
-    { name: "Renewal Night Oil", views: 756 },
-    { name: "Purifying Clay Mask", views: 632 }
-  ],
-  recentPurchases: [
-    { id: "ORD-001", total: 156.00, items: 3, created_at: new Date(Date.now() - 1000 * 60 * 15).toISOString() },
-    { id: "ORD-002", total: 89.00, items: 2, created_at: new Date(Date.now() - 1000 * 60 * 45).toISOString() },
-    { id: "ORD-003", total: 234.00, items: 4, created_at: new Date(Date.now() - 1000 * 60 * 120).toISOString() },
-    { id: "ORD-004", total: 67.00, items: 1, created_at: new Date(Date.now() - 1000 * 60 * 180).toISOString() },
-    { id: "ORD-005", total: 178.00, items: 3, created_at: new Date(Date.now() - 1000 * 60 * 240).toISOString() }
-  ],
-  dailyPageViews: [
-    { date: "Mon", views: 1823 },
-    { date: "Tue", views: 2145 },
-    { date: "Wed", views: 1967 },
-    { date: "Thu", views: 2456 },
-    { date: "Fri", views: 2789 },
-    { date: "Sat", views: 1534 },
-    { date: "Sun", views: 1245 }
-  ],
-  cartConversion: { added: 1456, purchased: 342 },
-  productAnalytics: [
-    { product_id: "radiance-serum", product_name: "Radiance Serum", product_category: "serums", product_price: 89, stock_quantity: 45, low_stock_threshold: 10, views: 1245, cart_adds: 220, purchases: 62, revenue: 5518 },
-    { product_id: "hydra-glow-moisturizer", product_name: "Hydra Glow Moisturizer", product_category: "moisturizers", product_price: 67, stock_quantity: 8, low_stock_threshold: 10, views: 987, cart_adds: 185, purchases: 52, revenue: 3484 },
-    { product_id: "gentle-foam-cleanser", product_name: "Gentle Foam Cleanser", product_category: "cleansers", product_price: 45, stock_quantity: 62, low_stock_threshold: 15, views: 814, cart_adds: 145, purchases: 41, revenue: 1845 },
-    { product_id: "renewal-night-oil", product_name: "Renewal Night Oil", product_category: "oils", product_price: 95, stock_quantity: 28, low_stock_threshold: 10, views: 756, cart_adds: 125, purchases: 36, revenue: 3420 },
-    { product_id: "purifying-clay-mask", product_name: "Purifying Clay Mask", product_category: "masks", product_price: 52, stock_quantity: 5, low_stock_threshold: 10, views: 632, cart_adds: 105, purchases: 28, revenue: 1456 },
-    { product_id: "balancing-toner", product_name: "Balancing Toner", product_category: "toners", product_price: 38, stock_quantity: 71, low_stock_threshold: 15, views: 589, cart_adds: 92, purchases: 23, revenue: 874 },
-    { product_id: "vitamin-c-brightening-serum", product_name: "Vitamin C Brightening Serum", product_category: "serums", product_price: 78, stock_quantity: 33, low_stock_threshold: 10, views: 534, cart_adds: 82, purchases: 19, revenue: 1482 },
-    { product_id: "deep-hydration-cream", product_name: "Deep Hydration Cream", product_category: "moisturizers", product_price: 72, stock_quantity: 19, low_stock_threshold: 10, views: 478, cart_adds: 108, purchases: 25, revenue: 1800 },
-    { product_id: "gentle-exfoliating-scrub", product_name: "Gentle Exfoliating Scrub", product_category: "cleansers", product_price: 42, stock_quantity: 54, low_stock_threshold: 15, views: 423, cart_adds: 95, purchases: 22, revenue: 924 },
-    { product_id: "rosehip-facial-oil", product_name: "Rosehip Facial Oil", product_category: "oils", product_price: 65, stock_quantity: 41, low_stock_threshold: 10, views: 398, cart_adds: 78, purchases: 18, revenue: 1170 },
-    { product_id: "detox-charcoal-mask", product_name: "Detox Charcoal Mask", product_category: "masks", product_price: 48, stock_quantity: 3, low_stock_threshold: 10, views: 367, cart_adds: 65, purchases: 15, revenue: 720 },
-    { product_id: "hydrating-mist-toner", product_name: "Hydrating Mist Toner", product_category: "toners", product_price: 35, stock_quantity: 67, low_stock_threshold: 15, views: 345, cart_adds: 58, purchases: 10, revenue: 350 },
-    { product_id: "anti-aging-eye-serum", product_name: "Anti-Aging Eye Serum", product_category: "serums", product_price: 98, stock_quantity: 22, low_stock_threshold: 10, views: 312, cart_adds: 55, purchases: 6, revenue: 588 },
-    { product_id: "overnight-repair-mask", product_name: "Overnight Repair Mask", product_category: "masks", product_price: 58, stock_quantity: 38, low_stock_threshold: 10, views: 354, cart_adds: 43, purchases: 5, revenue: 5314.50 }
-  ],
-  totalStock: 496,
-  lowStockCount: 3
 }
 
 const EMPTY_DATA: AnalyticsData = {
@@ -377,14 +310,13 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    // Manual refresh only — no polling, no realtime subscriptions.
+    // Manual refresh only â€” no polling, no realtime subscriptions.
     // Use the Refresh button in the header to reload analytics on demand.
     fetchAnalytics()
     fetchUnreadCount()
   }, [])
 
   const displayData: AnalyticsData = data || EMPTY_DATA
-  const isUsingMockData = false
 
   if (loading) {
     return (
@@ -426,7 +358,7 @@ export default function AdminDashboard() {
     return acc
   }, [] as { name: string; value: number; stock: number }[])
   
-  // Use displayData for these (already merged with mock data)
+  // Derived display slices from live analytics data.
   const topProductsData = displayData.topProducts
   const recentPurchasesData = displayData.recentPurchases
   const cartConversionData = displayData.cartConversion
@@ -443,11 +375,6 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {isUsingMockData && (
-              <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
-                Demo Data
-              </span>
-            )}
             <span className="text-xs text-muted-foreground hidden sm:block">
               Updated: {lastRefresh.toLocaleTimeString()}
             </span>
@@ -707,7 +634,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Top Click Targets — live, full width */}
+            {/* Top Click Targets â€” live, full width */}
             <div className="bg-card rounded-2xl p-6 border border-border/50 mt-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -722,7 +649,7 @@ export default function AdminDashboard() {
               </div>
               {displayData.topClicks.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4">
-                  No click data yet — CTA clicks across the storefront will appear here in real time.
+                  No click data yet â€” CTA clicks across the storefront will appear here in real time.
                 </p>
               ) : (
                 <div className="space-y-3">
