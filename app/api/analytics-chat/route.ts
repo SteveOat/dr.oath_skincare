@@ -4,6 +4,7 @@ import {
   streamText,
   UIMessage,
 } from 'ai'
+import { xai } from '@ai-sdk/xai'
 import { createClient } from '@/lib/supabase/server'
 import {
   type AdSpendRow,
@@ -561,7 +562,7 @@ ROAS interpretation guidelines (use when making recommendations):
 Be concise, data-driven, and actionable. Always cite specific numbers from the data above. Format responses with clear structure using bullet points or numbered lists when appropriate.`
 
   const result = streamText({
-    model: "openai/gpt-5-mini",
+    model: xai("grok-4.3"),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     abortSignal: req.signal,

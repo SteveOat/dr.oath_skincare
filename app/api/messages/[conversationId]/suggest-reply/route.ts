@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { generateText, Output } from "ai"
+import { xai } from "@ai-sdk/xai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 
@@ -133,14 +134,14 @@ Generate 3 reply drafts the agent could send next.`
 
     try {
       const result = await generateText({
-        model: "openai/gpt-5-mini",
+        model: xai("grok-4.3"),
         system: systemPrompt,
         prompt: userPrompt,
-        experimental_output: Output.object({ schema: SuggestionsSchema }),
+        output: Output.object({ schema: SuggestionsSchema }),
       })
 
       return NextResponse.json({
-        suggestions: result.experimental_output.suggestions,
+        suggestions: result.output.suggestions,
         usingMock,
       })
     } catch (aiErr) {

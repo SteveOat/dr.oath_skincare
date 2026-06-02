@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { generateText, Output } from "ai"
+import { xai } from "@ai-sdk/xai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { buildYesterdaySnapshot } from "@/lib/ads/yesterday-snapshot"
@@ -131,13 +132,13 @@ ROAS interpretation:
 Pick the most important story (best or worst platform/campaign, big swing vs baseline, or overall ROAS health) and produce the JSON output.`
 
     const result = await generateText({
-      model: "openai/gpt-5-mini",
-      experimental_output: Output.object({ schema: insightSchema }),
+      model: xai("grok-4.3"),
+      output: Output.object({ schema: insightSchema }),
       prompt,
       maxRetries: 1,
     })
 
-    const insight = result.experimental_output
+    const insight = result.output
 
     const row = {
       insight_date: insightDate,
@@ -148,7 +149,7 @@ Pick the most important story (best or worst platform/campaign, big swing vs bas
       key_metric_value: insight.keyMetricValue,
       sentiment: insight.sentiment,
       snapshot,
-      model: "openai/gpt-5-mini",
+      model: "xai/grok-4.3",
     }
 
     const { data: saved, error: saveError } = await supabase

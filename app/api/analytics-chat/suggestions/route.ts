@@ -1,4 +1,5 @@
 import { generateText } from "ai"
+import { xai } from "@ai-sdk/xai"
 
 export const maxDuration = 10
 
@@ -38,10 +39,9 @@ export async function POST(req: Request) {
       )
       .join("\n\n")
 
-    // gpt-4o-mini is consistently 1-2s, vs gpt-5-mini at 8-10s.
-    // No experimental_output / Zod — just parse a plain JSON array, ~3x faster.
+    // Keep this as plain JSON parsing instead of structured output to minimize latency.
     const result = await generateText({
-      model: "openai/gpt-4o-mini",
+      model: xai("grok-4.3"),
       system: SYSTEM_PROMPT,
       prompt: `Conversation so far:\n\n${transcript}\n\nReturn the JSON array now.`,
     })
