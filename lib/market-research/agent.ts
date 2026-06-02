@@ -1,5 +1,5 @@
 import { generateText, Output } from "ai"
-import { xai, type XaiLanguageModelChatOptions } from "@ai-sdk/xai"
+import { xai } from "@ai-sdk/xai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 
@@ -8,8 +8,8 @@ import { createClient } from "@/lib/supabase/server"
  * ---------------------
  * Uses the direct xAI API via @ai-sdk/xai.
  *
- * The provider reads XAI_API_KEY by default. Market research uses xAI Live
- * Search for fresh source-backed briefings.
+ * The provider reads XAI_API_KEY by default. Market research uses xAI
+ * Responses API search tools for fresh source-backed briefings.
  */
 
 const InsightSchema = z.object({
@@ -63,8 +63,10 @@ export type RunResult = {
 
 type CollectedSource = { url: string; title: string }
 
-const XAI_MODEL_ID = "grok-3-latest"
-const XAI_MODEL_LABEL = `xai/${XAI_MODEL_ID}`
+const XAI_CHAT_MODEL_ID = "grok-3-latest"
+const XAI_RESEARCH_MODEL_ID = "grok-4.3"
+const XAI_CHAT_MODEL_LABEL = `xai/${XAI_CHAT_MODEL_ID}`
+const XAI_RESEARCH_MODEL_LABEL = `xai/${XAI_RESEARCH_MODEL_ID}`
 
 export async function runMarketResearch(opts: RunOptions = {}): Promise<RunResult> {
   const supabase = await createClient()
@@ -110,7 +112,7 @@ export async function runMarketResearch(opts: RunOptions = {}): Promise<RunResul
     .slice(0, 10)
   const toDate = now.toISOString().slice(0, 10)
 
-  const searchSystemPrompt = `You are a senior market research analyst with native access to Live Search across the open web, news outlets, and X (Twitter).
+  const searchSystemPrompt = `You are a senior market research analyst with native access to xAI server-side search tools across the open web, news outlets, and X (Twitter).
 Today's date is ${today}.
 
 Business context:
@@ -127,31 +129,24 @@ Your task: gather the most material, recent (last 14 days) intelligence across t
 
 Be specific — name competitors, products, prices, percentages, dates wherever possible. Cite sources inline. Skip topics that returned nothing meaningful rather than padding. Aim for 400-800 words of dense, source-backed analysis.`
 
-  const searchUserPrompt = `Run live searches and produce today's market research briefing.`
+  const searchUserPrompt = `Run web and X searches and produce today's market research briefing.`
 
   try {
-    // STEP 1 — Grok with direct xAI Live Search.
+    // STEP 1 — Grok with direct xAI server-side search tools.
     const research = await generateText({
-      model: xai(XAI_MODEL_ID),
+      model: xai.responses(XAI_RESEARCH_MODEL_ID),
       system: searchSystemPrompt,
       prompt: searchUserPrompt,
       maxRetries: 1,
-      providerOptions: {
-        xai: {
-          searchParameters: {
-            mode: "on",
-            returnCitations: true,
-            maxSearchResults: 20,
-            fromDate,
-            toDate,
-            sources: [
-              { type: "web", safeSearch: true },
-              { type: "news", safeSearch: true },
-              { type: "x", postFavoriteCount: 50 },
-            ],
-          },
-        } satisfies XaiLanguageModelChatOptions,
-      },
+      tools: {
+        web_search: xai.tools.webSearch(),
+        x_search: xai.tools.xSearch({
+          fromDate,
+          toDate,
+          enableImageUnderstanding: false,
+          enableVideoUnderstanding: false,
+        }),
+      } as any,
     })
 
     const rawBriefing = research.text
@@ -177,16 +172,16 @@ Be specific — name competitors, products, prices, percentages, dates wherever 
     const sourceLines =
       collectedSources.length > 0
         ? collectedSources.map((s, i) => `${i + 1}. ${s.title} — ${s.url}`).join("\n")
-        : "(no sources collected from Live Search)"
+        : "(no sources collected from xAI server-side search)"
 
     const synth = await generateText({
-      model: xai(XAI_MODEL_ID),
+      model: xai(XAI_CHAT_MODEL_ID),
       system: `You convert a free-form market research briefing into a structured JSON report. Preserve every concrete fact, name, price, and date from the source material.`,
       prompt: `Source briefing (with embedded citations):
 
 ${rawBriefing}
 
-Sources discovered during Live Search:
+Sources discovered during xAI server-side search:
 ${sourceLines}
 
 Convert this into the structured report. Insights should be the 3-8 most material findings ordered by relevance. Recommendations should be 2-5 concrete actions the business should take this week.`,
@@ -207,7 +202,7 @@ Convert this into the structured report. Insights should be the 3-8 most materia
         topics: report.topics,
         sources: collectedSources,
         raw_text: rawBriefing || null,
-        model: `${XAI_MODEL_LABEL} + Live Search -> ${XAI_MODEL_LABEL}`,
+        model: `${XAI_RESEARCH_MODEL_LABEL} + Web/X Search -> ${XAI_CHAT_MODEL_LABEL}`,
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", reportId)
@@ -240,7 +235,7 @@ Convert this into the structured report. Insights should be the 3-8 most materia
     ) {
       message = `xAI rejected the request — your XAI_API_KEY may be invalid. (raw: ${rawMessage})`
     } else if (lower.includes("gone") || lower.includes("410")) {
-      message = `xAI returned 410 Gone — model "${XAI_MODEL_ID}" may have been deprecated. Check current model names at https://docs.x.ai/developers/models. (raw: ${rawMessage})`
+      message = `xAI returned 410 Gone — model or search tooling may be unavailable. Check current model names and server-side search tools at https://docs.x.ai/developers/models. (raw: ${rawMessage})`
     } else if (lower.includes("insufficient") && lower.includes("credit")) {
       message = `Your xAI account is out of credits. Top up at https://console.x.ai. (raw: ${rawMessage})`
     } else if (lower.includes("rate limit") || lower.includes("429")) {
@@ -253,7 +248,7 @@ Convert this into the structured report. Insights should be the 3-8 most materia
       .update({
         status: "failed",
         error: message,
-        model: XAI_MODEL_LABEL,
+        model: XAI_RESEARCH_MODEL_LABEL,
         duration_ms: Date.now() - startedAt,
       })
       .eq("id", reportId)
