@@ -2,6 +2,7 @@ import { generateText } from "ai"
 import { xai } from "@ai-sdk/xai"
 
 export const maxDuration = 10
+const MODEL_TIMEOUT_MS = 4500
 
 interface IncomingMessage {
   role: "user" | "assistant" | "system"
@@ -21,6 +22,67 @@ Rules:
 Respond with ONLY a JSON array of 3 strings, nothing else. Example:
 ["Why is Facebook ROAS dropping?","How does TikTok compare?","Should I pause this campaign?"]`
 
+function fallbackSuggestions(messages: IncomingMessage[]): string[] {
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant")
+  const text = (lastAssistant?.content || "").toLowerCase()
+
+  if (text.includes("ad spend") || text.includes("roas") || text.includes("campaign")) {
+    if (text.includes("$0.00") || text.includes("no spend") || text.includes("no tagged")) {
+      return [
+        "How do I add ad spend?",
+        "Which UTMs are missing?",
+        "Show tagged ad clicks",
+      ]
+    }
+
+    return [
+      "Which campaign should pause?",
+      "Compare spend by platform",
+      "Show campaign ROAS details",
+    ]
+  }
+
+  if (text.includes("stock") || text.includes("restock") || text.includes("inventory")) {
+    return [
+      "Which products are lowest?",
+      "How many units should I order?",
+      "Show slow-moving stock",
+    ]
+  }
+
+  if (text.includes("revenue") || text.includes("purchase") || text.includes("sales")) {
+    return [
+      "Which products drove revenue?",
+      "Show recent purchases",
+      "Compare revenue by category",
+    ]
+  }
+
+  return [
+    "What changed most today?",
+    "What should I fix first?",
+    "Show the biggest risk",
+  ]
+}
+
+function parseSuggestions(text: string): string[] {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim()
+  const parsed = JSON.parse(cleaned)
+  if (!Array.isArray(parsed)) return []
+
+  return parsed
+    .filter((x): x is string => typeof x === "string")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+}
+
 export async function POST(req: Request) {
   try {
     const { messages }: { messages: IncomingMessage[] } = await req.json()
@@ -39,35 +101,23 @@ export async function POST(req: Request) {
       )
       .join("\n\n")
 
-    // Keep this as plain JSON parsing instead of structured output to minimize latency.
-    const result = await generateText({
-      model: xai("grok-3-latest"),
-      system: SYSTEM_PROMPT,
-      prompt: `Conversation so far:\n\n${transcript}\n\nReturn the JSON array now.`,
-    })
+    const fallback = fallbackSuggestions(messages)
 
-    let suggestions: string[] = []
     try {
-      // Strip code fences if the model wrapped them
-      const cleaned = result.text
-        .trim()
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/```\s*$/i, "")
-        .trim()
-      const parsed = JSON.parse(cleaned)
-      if (Array.isArray(parsed)) {
-        suggestions = parsed
-          .filter((x): x is string => typeof x === "string")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .slice(0, 3)
-      }
+      // Keep this as plain JSON parsing instead of structured output to minimize latency.
+      const result = await Promise.race([
+        generateText({
+          model: xai("grok-3-latest"),
+          system: SYSTEM_PROMPT,
+          prompt: `Conversation so far:\n\n${transcript}\n\nReturn the JSON array now.`,
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), MODEL_TIMEOUT_MS)),
+      ])
+      const suggestions = result ? parseSuggestions(result.text) : []
+      return Response.json({ suggestions: suggestions.length > 0 ? suggestions : fallback })
     } catch {
-      // If parsing fails, just return empty — UI will hide the section.
-      suggestions = []
+      return Response.json({ suggestions: fallback })
     }
-
-    return Response.json({ suggestions })
   } catch (error) {
     console.error("[suggestions]", error)
     return Response.json({ suggestions: [] })

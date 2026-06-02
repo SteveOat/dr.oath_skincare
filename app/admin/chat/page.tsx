@@ -53,6 +53,7 @@ export default function FullScreenChatPage() {
   const [sessionId, setSessionId] = useState<string>(() => newSessionId())
   const [sessionCreatedAt, setSessionCreatedAt] = useState<number>(() => Date.now())
   const savedForMessageIdRef = useRef<string | null>(null)
+  const followUpsRequestedForMessageIdRef = useRef<string | null>(null)
 
   const { data: anomaliesData } = useSWR<AnomaliesResponse>(
     "/api/anomalies",
@@ -120,12 +121,13 @@ export default function FullScreenChatPage() {
 
     const last = messages[messages.length - 1]
     if (last.role !== "assistant") return
-    if (followUpsForMessageId === last.id) return
+    if (followUpsRequestedForMessageIdRef.current === last.id) return
 
     const lastText = getMessageText(last).trim()
     if (!lastText) return
 
     let cancelled = false
+    followUpsRequestedForMessageIdRef.current = last.id
     setFollowUpsLoading(true)
     setFollowUps([])
     setFollowUpsForMessageId(last.id)
@@ -164,12 +166,13 @@ export default function FullScreenChatPage() {
       clearTimeout(timeoutId)
       controller.abort()
     }
-  }, [status, messages, followUpsForMessageId])
+  }, [status, messages])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
     setFollowUps([])
+    followUpsRequestedForMessageIdRef.current = null
     setFollowUpsForMessageId(null)
     sendMessage({ text: input })
     setInput("")
@@ -178,6 +181,7 @@ export default function FullScreenChatPage() {
   const handleQuickSend = (text: string) => {
     if (isLoading) return
     setFollowUps([])
+    followUpsRequestedForMessageIdRef.current = null
     setFollowUpsForMessageId(null)
     sendMessage({ text })
   }
@@ -185,6 +189,7 @@ export default function FullScreenChatPage() {
   const handleNewChat = () => {
     setMessages([])
     setFollowUps([])
+    followUpsRequestedForMessageIdRef.current = null
     setFollowUpsForMessageId(null)
     setInput("")
     setSessionId(newSessionId())
@@ -199,6 +204,7 @@ export default function FullScreenChatPage() {
     setSessionId(s.id)
     setSessionCreatedAt(s.createdAt)
     setFollowUps([])
+    followUpsRequestedForMessageIdRef.current = null
     setFollowUpsForMessageId(null)
     setInput("")
     // Mark the latest assistant message as already saved so we don't immediately re-save on load

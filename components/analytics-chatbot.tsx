@@ -43,6 +43,7 @@ export function AnalyticsChatbot() {
   const [sessionId] = useState(() => newSessionId())
   const [sessionCreatedAt] = useState(() => Date.now())
   const savedForMessageIdRef = useRef<string | null>(null)
+  const followUpsRequestedForMessageIdRef = useRef<string | null>(null)
 
   // Poll anomalies every 60s — surface fresh alerts without spamming the API
   const { data: anomalyData } = useSWR<AnomaliesResponse>("/api/anomalies", fetcher, {
@@ -101,13 +102,14 @@ export function AnalyticsChatbot() {
 
     const last = messages[messages.length - 1]
     if (last.role !== "assistant") return
-    // Already fetched for this message
-    if (followUpsForMessageId === last.id) return
+    // Already requested for this message
+    if (followUpsRequestedForMessageIdRef.current === last.id) return
 
     const lastText = getMessageText(last).trim()
     if (!lastText) return
 
     let cancelled = false
+    followUpsRequestedForMessageIdRef.current = last.id
     setFollowUpsLoading(true)
     setFollowUps([])
     setFollowUpsForMessageId(last.id)
@@ -147,12 +149,13 @@ export function AnalyticsChatbot() {
       clearTimeout(timeoutId)
       controller.abort()
     }
-  }, [status, messages, followUpsForMessageId])
+  }, [status, messages])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
     setFollowUps([])
+    followUpsRequestedForMessageIdRef.current = null
     setFollowUpsForMessageId(null)
     sendMessage({ text: input })
     setInput("")
@@ -161,6 +164,7 @@ export function AnalyticsChatbot() {
   const handleFollowUpClick = (text: string) => {
     if (isLoading) return
     setFollowUps([])
+    followUpsRequestedForMessageIdRef.current = null
     setFollowUpsForMessageId(null)
     sendMessage({ text })
   }
