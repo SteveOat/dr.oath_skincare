@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, useRef, useState, type ReactNode } from "react"
 import { trackCartEvent } from "@/lib/analytics"
 
 export interface CartItem {
@@ -28,37 +28,38 @@ const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
+  const itemsRef = useRef<CartItem[]>([])
   const [isOpen, setIsOpen] = useState(false)
 
   const addItem = (newItem: Omit<CartItem, "quantity">) => {
-    setItems(currentItems => {
-      const existingItem = currentItems.find(item => item.id === newItem.id)
-      const newSubtotal = currentItems.reduce((sum, item) => sum + item.price * item.quantity, 0) + newItem.price
-      
-      // Track cart event
-      trackCartEvent("add", { id: newItem.id, name: newItem.name, price: newItem.price }, 1, newSubtotal)
-      
-      if (existingItem) {
-        return currentItems.map(item =>
+    const currentItems = itemsRef.current
+    const existingItem = currentItems.find(item => item.id === newItem.id)
+    const nextItems = existingItem
+      ? currentItems.map(item =>
           item.id === newItem.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
-      }
-      return [...currentItems, { ...newItem, quantity: 1 }]
-    })
+      : [...currentItems, { ...newItem, quantity: 1 }]
+    const newSubtotal = nextItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+    itemsRef.current = nextItems
+    setItems(nextItems)
+    trackCartEvent("add", { id: newItem.id, name: newItem.name, price: newItem.price }, 1, newSubtotal)
     setIsOpen(true)
   }
 
   const removeItem = (id: string) => {
-    setItems(currentItems => {
-      const itemToRemove = currentItems.find(item => item.id === id)
-      if (itemToRemove) {
-        const newSubtotal = currentItems.reduce((sum, item) => sum + item.price * item.quantity, 0) - (itemToRemove.price * itemToRemove.quantity)
-        trackCartEvent("remove", { id: itemToRemove.id, name: itemToRemove.name, price: itemToRemove.price }, itemToRemove.quantity, newSubtotal)
-      }
-      return currentItems.filter(item => item.id !== id)
-    })
+    const currentItems = itemsRef.current
+    const itemToRemove = currentItems.find(item => item.id === id)
+    const nextItems = currentItems.filter(item => item.id !== id)
+    itemsRef.current = nextItems
+    setItems(nextItems)
+
+    if (itemToRemove) {
+      const newSubtotal = nextItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+      trackCartEvent("remove", { id: itemToRemove.id, name: itemToRemove.name, price: itemToRemove.price }, itemToRemove.quantity, newSubtotal)
+    }
   }
 
   const updateQuantity = (id: string, quantity: number) => {
@@ -66,14 +67,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeItem(id)
       return
     }
-    setItems(currentItems =>
-      currentItems.map(item =>
-        item.id === id ? { ...item, quantity } : item
-      )
+    const currentItems = itemsRef.current
+    const existingItem = currentItems.find(item => item.id === id)
+    const nextItems = currentItems.map(item =>
+      item.id === id ? { ...item, quantity } : item
     )
+    itemsRef.current = nextItems
+    setItems(nextItems)
+
+    if (existingItem && existingItem.quantity !== quantity) {
+      const newSubtotal = nextItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+      trackCartEvent(
+        "update_quantity",
+        { id: existingItem.id, name: existingItem.name, price: existingItem.price },
+        quantity,
+        newSubtotal,
+      )
+    }
   }
 
   const clearCart = () => {
+    itemsRef.current = []
     setItems([])
   }
 

@@ -179,7 +179,7 @@ export async function POST(req: Request) {
   const totalSessions = sessions.length
   const totalPageViews = pageViews.length
   const totalProductViews = productViews.length
-  const totalCartAdds = cartEvents.filter((e) => e.event_type === "add_to_cart").length
+  const totalCartAdds = cartEvents.filter((e) => e.event_type === "add").length
   const totalPurchases = purchases.length
   const totalRevenue = purchases.reduce((sum, p) => sum + (parseFloat(p.order_total) || 0), 0)
   const totalClicks = clicks.length
@@ -211,6 +211,8 @@ export async function POST(req: Request) {
   const totalStock = inventory.reduce((sum, p) => sum + (p.stock_quantity || 0), 0)
   const lowStockItems = inventory.filter((p) => p.stock_quantity <= (p.low_stock_threshold || 10))
 
+  const inventoryById = new Map(inventory.map((p: any) => [p.product_id, p]))
+
   // Categories
   const categoryMap: Record<string, { revenue: number; products: number; totalPrice: number }> = {}
   inventory.forEach((p) => {
@@ -218,6 +220,15 @@ export async function POST(req: Request) {
     if (!categoryMap[cat]) categoryMap[cat] = { revenue: 0, products: 0, totalPrice: 0 }
     categoryMap[cat].products++
     categoryMap[cat].totalPrice += parseFloat(p.product_price) || 0
+  })
+  purchases.forEach((purchase) => {
+    const items = Array.isArray(purchase.items) ? purchase.items : []
+    items.forEach((item: any) => {
+      const inventoryItem = inventoryById.get(item.id || item.product_id) as any
+      const cat = inventoryItem?.product_category || "uncategorized"
+      if (!categoryMap[cat]) categoryMap[cat] = { revenue: 0, products: 0, totalPrice: 0 }
+      categoryMap[cat].revenue += (Number(item.price) || 0) * (Number(item.quantity) || 0)
+    })
   })
   const categoryPerformance = Object.entries(categoryMap).map(([category, data]) => ({
     category,
@@ -395,30 +406,30 @@ export async function POST(req: Request) {
   const hasRealData = totalSessions > 0 || totalPageViews > 0 || inventory.length > 0
   const hasMessaging = conversations.length > 0
 
-  // Build dashboard data — merge real with mock fallbacks
+  // Build dashboard data. Once real analytics exists, keep empty sections empty.
   const dashboardData = {
     overview: {
-      totalSessions: totalSessions || MOCK_DATA.overview.totalSessions,
-      totalPageViews: totalPageViews || MOCK_DATA.overview.totalPageViews,
-      totalProductViews: totalProductViews || MOCK_DATA.overview.totalProductViews,
-      totalCartAdds: totalCartAdds || MOCK_DATA.overview.totalCartAdds,
-      totalPurchases: totalPurchases || MOCK_DATA.overview.totalPurchases,
-      totalRevenue: totalRevenue || MOCK_DATA.overview.totalRevenue,
-      totalClicks: totalClicks || MOCK_DATA.overview.totalClicks,
+      totalSessions: hasRealData ? totalSessions : MOCK_DATA.overview.totalSessions,
+      totalPageViews: hasRealData ? totalPageViews : MOCK_DATA.overview.totalPageViews,
+      totalProductViews: hasRealData ? totalProductViews : MOCK_DATA.overview.totalProductViews,
+      totalCartAdds: hasRealData ? totalCartAdds : MOCK_DATA.overview.totalCartAdds,
+      totalPurchases: hasRealData ? totalPurchases : MOCK_DATA.overview.totalPurchases,
+      totalRevenue: hasRealData ? totalRevenue : MOCK_DATA.overview.totalRevenue,
+      totalClicks: hasRealData ? totalClicks : MOCK_DATA.overview.totalClicks,
       conversionRate: totalCartAdds > 0
         ? ((totalPurchases / totalCartAdds) * 100).toFixed(1)
-        : MOCK_DATA.overview.conversionRate,
+        : hasRealData ? "0.0" : MOCK_DATA.overview.conversionRate,
     },
-    topProducts: topProducts.length > 0 ? topProducts : MOCK_DATA.topProducts,
-    topClicks: topClicks.length > 0 ? topClicks : MOCK_DATA.topClicks,
-    categoryPerformance: categoryPerformance.length > 0 ? categoryPerformance : MOCK_DATA.categoryPerformance,
+    topProducts: topProducts.length > 0 ? topProducts : hasRealData ? [] : MOCK_DATA.topProducts,
+    topClicks: topClicks.length > 0 ? topClicks : hasRealData ? [] : MOCK_DATA.topClicks,
+    categoryPerformance: categoryPerformance.length > 0 ? categoryPerformance : hasRealData ? [] : MOCK_DATA.categoryPerformance,
     inventory: {
-      totalProducts: inventory.length || MOCK_DATA.inventory.totalProducts,
-      totalStock: totalStock || MOCK_DATA.inventory.totalStock,
-      lowStockCount: lowStockItems.length || MOCK_DATA.inventory.lowStockCount,
+      totalProducts: hasRealData ? inventory.length : MOCK_DATA.inventory.totalProducts,
+      totalStock: hasRealData ? totalStock : MOCK_DATA.inventory.totalStock,
+      lowStockCount: hasRealData ? lowStockItems.length : MOCK_DATA.inventory.lowStockCount,
       lowStockItems: lowStockItems.length > 0
         ? lowStockItems.map((p) => `${p.product_name} (${p.stock_quantity} units)`)
-        : MOCK_DATA.inventory.lowStockItems,
+        : hasRealData ? [] : MOCK_DATA.inventory.lowStockItems,
     },
     competitors: competitors.length > 0
       ? competitors.map((c) => ({
@@ -431,7 +442,7 @@ export async function POST(req: Request) {
         }))
       : MOCK_DATA.competitors,
     messaging: hasMessaging ? messagingStats : MOCK_DATA.messaging,
-    recentPurchases: recentPurchases.length > 0 ? recentPurchases : MOCK_DATA.recentPurchases,
+    recentPurchases: recentPurchases.length > 0 ? recentPurchases : hasRealData ? [] : MOCK_DATA.recentPurchases,
     trends: hasRealData ? realTrends : {
       pageViewsChange: MOCK_DATA.recentTrends.pageViewsChange,
       revenueChange: MOCK_DATA.recentTrends.revenueChange,

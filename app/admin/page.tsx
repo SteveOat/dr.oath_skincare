@@ -147,6 +147,25 @@ const MOCK_DATA: AnalyticsData = {
   lowStockCount: 3
 }
 
+const EMPTY_DATA: AnalyticsData = {
+  totalSessions: 0,
+  totalPageViews: 0,
+  totalProductViews: 0,
+  totalCartEvents: 0,
+  totalPurchases: 0,
+  totalRevenue: 0,
+  totalClicks: 0,
+  topClicks: [],
+  pageViewsByPath: [],
+  topProducts: [],
+  recentPurchases: [],
+  dailyPageViews: [],
+  cartConversion: { added: 0, purchased: 0 },
+  productAnalytics: [],
+  totalStock: 0,
+  lowStockCount: 0,
+}
+
 export default function AdminDashboard() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -206,7 +225,7 @@ export default function AdminDashboard() {
         supabase.from("analytics_product_views").select("id", { count: "exact" }),
         supabase.from("analytics_cart_events").select("id, event_type", { count: "exact" }),
         supabase.from("analytics_purchases").select("id, order_total, item_count, items, created_at"),
-        supabase.from("analytics_page_views").select("page_path"),
+        supabase.from("analytics_page_views").select("page_path, created_at"),
         supabase.from("analytics_product_views").select("product_name"),
         supabase.from("analytics_purchases").select("id, order_total, item_count, created_at").order("created_at", { ascending: false }).limit(10),
         supabase.from("products_inventory").select("*"),
@@ -238,19 +257,23 @@ export default function AdminDashboard() {
         .slice(0, 5)
 
       // Calculate total revenue
-      const totalRevenue = purchasesRes.data?.reduce((sum: number, p: { order_total: number }) => sum + (p.order_total || 0), 0) || 0
+      const totalRevenue = purchasesRes.data?.reduce((sum: number, p: { order_total: number | string }) => sum + Number(p.order_total || 0), 0) || 0
 
       // Calculate cart conversion
       const addEvents = cartEventsRes.data?.filter((e: { event_type: string }) => e.event_type === "add").length || 0
       const purchaseCount = purchasesRes.data?.length || 0
 
-      // Generate daily page views (last 7 days)
-      const dailyPageViews = []
+      // Generate daily page views (last 7 days) from real page-view rows
+      const dailyPageViews: { date: string; views: number }[] = []
       for (let i = 6; i >= 0; i--) {
         const date = new Date()
         date.setDate(date.getDate() - i)
+        const yyyyMmDd = date.toISOString().slice(0, 10)
         const dateStr = date.toLocaleDateString("en-US", { weekday: "short" })
-        dailyPageViews.push({ date: dateStr, views: Math.floor(Math.random() * 50) + (pageViewsRes.count || 0) / 7 })
+        const views = (pagePathsRes.data || []).filter((row: { created_at?: string }) =>
+          row.created_at?.slice(0, 10) === yyyyMmDd
+        ).length
+        dailyPageViews.push({ date: dateStr, views })
       }
 
       // Process per-product analytics
@@ -273,8 +296,8 @@ export default function AdminDashboard() {
             if (!productPurchases[item.id]) {
               productPurchases[item.id] = { count: 0, revenue: 0 }
             }
-            productPurchases[item.id].count += item.quantity
-            productPurchases[item.id].revenue += item.price * item.quantity
+            productPurchases[item.id].count += 1
+            productPurchases[item.id].revenue += Number(item.price || 0) * Number(item.quantity || 0)
           })
         }
       })
@@ -319,14 +342,24 @@ export default function AdminDashboard() {
         totalSessions: sessionsRes.count || 0,
         totalPageViews: pageViewsRes.count || 0,
         totalProductViews: productViewsRes.count || 0,
-        totalCartEvents: cartEventsRes.count || 0,
+        totalCartEvents: addEvents,
         totalPurchases: purchasesRes.data?.length || 0,
         totalRevenue,
         totalClicks: clicksRes.count || 0,
         pageViewsByPath,
         topProducts,
         topClicks,
-        recentPurchases: recentPurchasesRes.data || [],
+        recentPurchases: (recentPurchasesRes.data || []).map((purchase: {
+          id: string
+          order_total: number | string
+          item_count: number
+          created_at: string
+        }) => ({
+          id: purchase.id,
+          total: Number(purchase.order_total || 0),
+          items: Number(purchase.item_count || 0),
+          created_at: purchase.created_at,
+        })),
         dailyPageViews,
         cartConversion: { added: addEvents, purchased: purchaseCount },
         productAnalytics,
@@ -336,9 +369,8 @@ export default function AdminDashboard() {
       setLastRefresh(new Date())
     } catch (err) {
       console.error("Failed to fetch analytics:", err)
-      // Use mock data instead of showing error
       setData(null)
-      setError(null)
+      setError(err instanceof Error ? err.message : "Failed to fetch analytics")
     } finally {
       setLoading(false)
     }
@@ -351,36 +383,8 @@ export default function AdminDashboard() {
     fetchUnreadCount()
   }, [])
 
-  // Create stable display data by merging real data with mock data for empty sections
-  // This is computed on every render but doesn't trigger re-renders
-  // Check if productAnalytics has actual purchase/revenue data (not just inventory)
-  const hasRealProductAnalytics = data?.productAnalytics?.some(p => p.views > 0 || p.purchases > 0 || p.revenue > 0) || false
-  
-  const displayData: AnalyticsData = data ? {
-    totalSessions: data.totalSessions > 0 ? data.totalSessions : MOCK_DATA.totalSessions,
-    totalPageViews: data.totalPageViews > 0 ? data.totalPageViews : MOCK_DATA.totalPageViews,
-    totalProductViews: data.totalProductViews > 0 ? data.totalProductViews : MOCK_DATA.totalProductViews,
-    totalCartEvents: data.totalCartEvents > 0 ? data.totalCartEvents : MOCK_DATA.totalCartEvents,
-    totalPurchases: data.totalPurchases > 0 ? data.totalPurchases : MOCK_DATA.totalPurchases,
-    totalRevenue: data.totalRevenue > 0 ? data.totalRevenue : MOCK_DATA.totalRevenue,
-    totalClicks: (data.totalClicks ?? 0) > 0 ? data.totalClicks : MOCK_DATA.totalClicks,
-    pageViewsByPath: data.pageViewsByPath.length > 0 ? data.pageViewsByPath : MOCK_DATA.pageViewsByPath,
-    topProducts: data.topProducts.length > 0 ? data.topProducts : MOCK_DATA.topProducts,
-    topClicks: (data.topClicks?.length ?? 0) > 0 ? data.topClicks : MOCK_DATA.topClicks,
-    recentPurchases: data.recentPurchases.length > 0 ? data.recentPurchases : MOCK_DATA.recentPurchases,
-    dailyPageViews: data.dailyPageViews.length > 0 ? data.dailyPageViews : MOCK_DATA.dailyPageViews,
-    cartConversion: data.cartConversion.added > 0 ? data.cartConversion : MOCK_DATA.cartConversion,
-    productAnalytics: hasRealProductAnalytics ? data.productAnalytics : MOCK_DATA.productAnalytics,
-    totalStock: hasRealProductAnalytics ? data.totalStock : MOCK_DATA.totalStock,
-    lowStockCount: hasRealProductAnalytics ? data.lowStockCount : MOCK_DATA.lowStockCount
-  } : MOCK_DATA
-  
-  // Check if we're using any mock data
-  const isUsingMockData = !data || 
-    data.topProducts.length === 0 || 
-    data.recentPurchases.length === 0 || 
-    data.productAnalytics.length === 0 || 
-    data.totalRevenue === 0
+  const displayData: AnalyticsData = data || EMPTY_DATA
+  const isUsingMockData = false
 
   if (loading) {
     return (
@@ -582,7 +586,7 @@ export default function AdminDashboard() {
                 <h3 className="font-serif text-lg text-foreground mb-4">Page Views (Last 7 Days)</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data?.dailyPageViews || []}>
+                    <LineChart data={displayData.dailyPageViews}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                       <XAxis dataKey="date" stroke="#888" fontSize={12} />
                       <YAxis stroke="#888" fontSize={12} />
@@ -612,14 +616,7 @@ export default function AdminDashboard() {
                   <ResponsiveContainer width="100%" height={256}>
                     <PieChart width={400} height={256}>
                       <Pie
-                        data={[
-                          { name: "serums", value: 8287 },
-                          { name: "moisturizers", value: 4914 },
-                          { name: "cleansers", value: 2565 },
-                          { name: "oils", value: 4390 },
-                          { name: "masks", value: 2336 },
-                          { name: "toners", value: 1192 }
-                        ]}
+                        data={categoryData}
                         dataKey="value"
                         nameKey="name"
                         cx="50%"

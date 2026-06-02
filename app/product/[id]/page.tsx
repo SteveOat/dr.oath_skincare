@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useParams } from "next/navigation"
-import { ChevronLeft, Minus, Plus, ChevronDown, Leaf, Heart, Award, Recycle, Star, Check } from "lucide-react"
+import { ChevronLeft, Minus, Plus, ChevronDown, Leaf, Heart, Award, Recycle, Star, Check, AlertTriangle } from "lucide-react"
 import { Header } from "@/components/boty/header"
 import { Footer } from "@/components/boty/footer"
 import { useCart } from "@/components/boty/cart-context"
@@ -13,6 +13,7 @@ import { trackProductView, trackPurchase, trackClick } from "@/lib/analytics"
 const products: Record<string, {
   id: string
   name: string
+  category: string
   tagline: string
   description: string
   price: number
@@ -27,6 +28,7 @@ const products: Record<string, {
   "radiance-serum": {
     id: "radiance-serum",
     name: "Radiance Serum",
+    category: "serums",
     tagline: "Illuminate your natural glow",
     description: "A lightweight, fast-absorbing serum infused with Vitamin C and botanical extracts. Designed to brighten, even skin tone, and reveal your skin's natural radiance.",
     price: 68,
@@ -41,6 +43,7 @@ const products: Record<string, {
   "hydra-cream": {
     id: "hydra-cream",
     name: "Hydra Cream",
+    category: "moisturizers",
     tagline: "Deep moisture, lasting comfort",
     description: "A rich yet lightweight moisturizer that delivers intense hydration without heaviness. Formulated with hyaluronic acid and botanical butters for all-day nourishment.",
     price: 54,
@@ -55,6 +58,7 @@ const products: Record<string, {
   "gentle-cleanser": {
     id: "gentle-cleanser",
     name: "Gentle Cleanser",
+    category: "cleansers",
     tagline: "Cleanse without compromise",
     description: "A soothing botanical wash that removes impurities while respecting your skin's natural balance. Perfect for sensitive skin and daily use.",
     price: 38,
@@ -69,6 +73,7 @@ const products: Record<string, {
   "renewal-oil": {
     id: "renewal-oil",
     name: "Renewal Oil",
+    category: "oils",
     tagline: "Nourish deeply, glow eternally",
     description: "A luxurious blend of precious botanical oils that deeply nourish and restore skin overnight. Wake up to softer, more supple skin.",
     price: 72,
@@ -78,6 +83,156 @@ const products: Record<string, {
     details: "Renewal Oil combines argan, rosehip, and marula oils with vitamin E for intensive overnight nourishment. This dry oil absorbs quickly, leaving skin soft without residue. Ideal for mature or dehydrated skin seeking restoration.",
     howToUse: "Apply 4-6 drops to palms and warm between hands. Press gently onto face and neck as the final step of your evening routine. Can also be mixed with moisturizer for added hydration.",
     ingredients: "Argania Spinosa Kernel Oil, Rosa Canina Seed Oil, Sclerocarya Birrea Seed Oil, Tocopherol, Rosa Damascena Flower Oil, Lavandula Angustifolia Oil, Helianthus Annuus Seed Oil, Limonene, Linalool.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "hydrating-serum": {
+    id: "hydrating-serum",
+    name: "Hydrating Serum",
+    category: "serums",
+    tagline: "Instant moisture, glassy bounce",
+    description: "A hyaluronic acid serum that layers lightweight hydration into the skin for a plump, calm finish.",
+    price: 62,
+    originalPrice: null,
+    image: "/images/products/eye-serum-bottles.png",
+    sizes: ["30ml", "50ml"],
+    details: "Hydrating Serum combines hyaluronic acid, oat extract, and glycerin to support the moisture barrier without stickiness.",
+    howToUse: "Apply 2-3 pumps after cleansing while skin is slightly damp. Follow with moisturizer.",
+    ingredients: "Aqua, Glycerin, Sodium Hyaluronate, Avena Sativa Kernel Extract, Panthenol, Aloe Barbadensis Leaf Juice, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "age-defense-serum": {
+    id: "age-defense-serum",
+    name: "Age Defense Serum",
+    category: "serums",
+    tagline: "Smooth, firm, restore",
+    description: "A retinol and peptide complex designed to soften the look of fine lines while supporting skin resilience.",
+    price: 78,
+    originalPrice: null,
+    image: "/images/products/amber-dropper-bottles.png",
+    sizes: ["30ml", "50ml"],
+    details: "Age Defense Serum pairs encapsulated retinol with peptides and oat-derived soothing agents for a balanced evening treatment.",
+    howToUse: "Use at night 2-3 times per week, then increase as tolerated. Wear sunscreen the next morning.",
+    ingredients: "Aqua, Glycerin, Retinol, Palmitoyl Tripeptide-5, Avena Sativa Kernel Extract, Squalane, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "glow-serum": {
+    id: "glow-serum",
+    name: "Glow Serum",
+    category: "serums",
+    tagline: "Even tone, soft radiance",
+    description: "A niacinamide brightening serum for dullness, uneven tone, and daily barrier support.",
+    price: 58,
+    originalPrice: 68,
+    image: "/images/products/spray-bottles.png",
+    sizes: ["30ml", "50ml"],
+    details: "Glow Serum uses niacinamide, oat extract, and licorice root to help skin look more even and luminous.",
+    howToUse: "Apply morning or evening after cleansing. Follow with moisturizer.",
+    ingredients: "Aqua, Niacinamide, Glycerin, Glycyrrhiza Glabra Root Extract, Avena Sativa Kernel Extract, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "night-cream": {
+    id: "night-cream",
+    name: "Night Cream",
+    category: "moisturizers",
+    tagline: "Restorative overnight treatment",
+    description: "A cushiony night cream that nourishes dry skin and supports overnight barrier repair.",
+    price: 64,
+    originalPrice: null,
+    image: "/images/products/jars-wooden-lid.png",
+    sizes: ["50ml", "100ml"],
+    details: "Night Cream blends shea butter, ceramides, and oat extract for a rich but comfortable overnight finish.",
+    howToUse: "Apply as the final evening step. Massage into face and neck.",
+    ingredients: "Aqua, Butyrospermum Parkii Butter, Ceramide NP, Avena Sativa Kernel Extract, Squalane, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "day-cream-spf": {
+    id: "day-cream-spf",
+    name: "Day Cream SPF 30",
+    category: "moisturizers",
+    tagline: "Protection and hydration",
+    description: "A daily moisturizer with SPF 30 protection and a soft, non-greasy finish.",
+    price: 58,
+    originalPrice: null,
+    image: "/images/products/pump-bottles-lavender.png",
+    sizes: ["50ml", "100ml"],
+    details: "Day Cream SPF 30 combines hydrating skincare with broad daily protection for an easy morning routine.",
+    howToUse: "Apply generously as the final morning skincare step. Reapply during extended sun exposure.",
+    ingredients: "Aqua, Homosalate, Octisalate, Glycerin, Squalane, Avena Sativa Kernel Extract, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "rosehip-oil": {
+    id: "rosehip-oil",
+    name: "Rosehip Oil",
+    category: "oils",
+    tagline: "Pure organic rosehip extract",
+    description: "A lightweight facial oil for softness, glow, and replenishment.",
+    price: 48,
+    originalPrice: null,
+    image: "/images/products/serum-bottles-1.png",
+    sizes: ["30ml", "50ml"],
+    details: "Rosehip Oil is rich in naturally occurring fatty acids and antioxidants for a supple finish.",
+    howToUse: "Warm 2-4 drops between palms and press over moisturizer.",
+    ingredients: "Rosa Canina Seed Oil, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "jojoba-oil": {
+    id: "jojoba-oil",
+    name: "Jojoba Oil",
+    category: "oils",
+    tagline: "Balancing and lightweight",
+    description: "A skin-softening oil that feels light and helps seal in hydration.",
+    price: 42,
+    originalPrice: null,
+    image: "/images/products/spray-bottles.png",
+    sizes: ["30ml", "50ml"],
+    details: "Jojoba Oil is a simple, balancing facial oil suitable for daily use.",
+    howToUse: "Apply 2-3 drops as the final step or mix into moisturizer.",
+    ingredients: "Simmondsia Chinensis Seed Oil, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "argan-oil": {
+    id: "argan-oil",
+    name: "Argan Oil",
+    category: "oils",
+    tagline: "Moroccan beauty elixir",
+    description: "A nourishing oil for dry skin, dullness, and soft glow.",
+    price: 56,
+    originalPrice: null,
+    image: "/images/products/pump-bottles-cream.png",
+    sizes: ["30ml", "50ml"],
+    details: "Argan Oil delivers a plush, replenishing feel with a naturally radiant finish.",
+    howToUse: "Press 2-4 drops into skin after moisturizer or use on dry areas.",
+    ingredients: "Argania Spinosa Kernel Oil, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "glow-mask": {
+    id: "glow-mask",
+    name: "Glow Mask",
+    category: "masks",
+    tagline: "Weekly brightening treatment",
+    description: "A creamy mask that refreshes dull skin and leaves a soft, healthy-looking glow.",
+    price: 45,
+    originalPrice: null,
+    image: "/images/products/mask.jpg",
+    sizes: ["75ml", "120ml"],
+    details: "Glow Mask combines gentle exfoliating botanicals with soothing oat extract for a weekly reset.",
+    howToUse: "Apply an even layer to clean skin. Leave for 10 minutes, then rinse. Use 1-2 times weekly.",
+    ingredients: "Aqua, Kaolin, Glycerin, Avena Sativa Kernel Extract, Papaya Fruit Extract, Aloe Barbadensis Leaf Juice, Tocopherol.",
+    delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
+  },
+  "balance-toner": {
+    id: "balance-toner",
+    name: "Balance Toner",
+    category: "toners",
+    tagline: "pH restoring mist",
+    description: "A gentle mist toner that refreshes, balances, and prepares skin for serum and moisturizer.",
+    price: 32,
+    originalPrice: null,
+    image: "/images/products/toner.jpg",
+    sizes: ["100ml", "150ml"],
+    details: "Balance Toner uses calming botanical waters and oat extract to support a comfortable skin barrier.",
+    howToUse: "Mist over clean skin or apply with hands before serum. Use morning and evening.",
+    ingredients: "Aqua, Rosa Damascena Flower Water, Glycerin, Avena Sativa Kernel Extract, Panthenol, Aloe Barbadensis Leaf Juice.",
     delivery: "Free standard shipping on orders over $50. Express shipping available at checkout. All orders ship within 1-2 business days. Returns accepted within 30 days of purchase if product is unused and sealed."
   }
 }
@@ -104,6 +259,7 @@ export default function ProductPage() {
   const [isAdded, setIsAdded] = useState(false)
   const [showPurchaseModal, setShowPurchaseModal] = useState(false)
   const [isPurchaseLoading, setIsPurchaseLoading] = useState(false)
+  const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -112,9 +268,9 @@ export default function ProductPage() {
       id: product.id,
       name: product.name,
       price: product.price,
-      category: "skincare"
+      category: product.category
     })
-  }, [productId, product.id, product.name, product.price])
+  }, [productId, product.id, product.name, product.price, product.category])
 
   const toggleAccordion = (section: AccordionSection) => {
     setOpenAccordion(openAccordion === section ? null : section)
@@ -136,15 +292,22 @@ export default function ProductPage() {
     setTimeout(() => setIsAdded(false), 2000)
   }
 
-  const handleBuyNow = () => {
+  const handleBuyNow = async () => {
     trackClick("cta", `Buy Now: ${product.name}`, `pdp-buy-now-${product.id}`)
     setShowPurchaseModal(true)
     setIsPurchaseLoading(true)
+    setPurchaseError(null)
     
-    // Track purchase
-    trackPurchase(product.price * quantity, [
+    const result = await trackPurchase(product.price * quantity, [
       { id: product.id, name: product.name, price: product.price, quantity }
     ])
+
+    if (!result.ok) {
+      console.error("[Product] Buy now checkout failed:", result.error)
+      setIsPurchaseLoading(false)
+      setPurchaseError(result.error || "Could not complete checkout")
+      return
+    }
     
     setTimeout(() => {
       setIsPurchaseLoading(false)
@@ -365,6 +528,25 @@ export default function ProductPage() {
                 <p className="text-sm text-muted-foreground text-center">
                   Thank you for your purchase!
                 </p>
+              </div>
+            ) : purchaseError ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
+                  <AlertTriangle className="w-8 h-8 text-destructive" />
+                </div>
+                <h3 className="text-2xl font-serif text-foreground mb-2 text-center">
+                  Checkout failed
+                </h3>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  {purchaseError}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowPurchaseModal(false)}
+                  className="w-full bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 boty-transition"
+                >
+                  Back to product
+                </button>
               </div>
             ) : (
               // Success state

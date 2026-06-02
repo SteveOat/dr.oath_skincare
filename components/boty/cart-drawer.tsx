@@ -21,22 +21,31 @@ export function CartDrawer() {
   const { items, removeItem, updateQuantity, isOpen, setIsOpen, itemCount, subtotal, clearCart } = useCart()
   const [showPurchaseModal, setShowPurchaseModal] = useState(false)
   const [isPurchaseLoading, setIsPurchaseLoading] = useState(false)
+  const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
   const shipping = 0
   const total = subtotal + shipping
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
+    if (isPurchaseLoading || items.length === 0) return
+
     trackClick("cta", "Checkout", "cart-checkout")
     setShowPurchaseModal(true)
     setIsPurchaseLoading(true)
+    setPurchaseError(null)
     
-    // Track purchase
-    trackPurchase(total, items.map(item => ({
+    const result = await trackPurchase(total, items.map(item => ({
       id: item.id,
       name: item.name,
       price: item.price,
       quantity: item.quantity
     })))
+
+    if (!result.ok) {
+      setIsPurchaseLoading(false)
+      setPurchaseError(result.error || "Could not complete checkout")
+      return
+    }
     
     setTimeout(() => {
       setIsPurchaseLoading(false)
@@ -157,7 +166,8 @@ export function CartDrawer() {
             <button
               type="button"
               onClick={handleCheckout}
-              className="w-full bg-primary text-primary-foreground py-4 rounded-full font-medium hover:bg-primary/90 boty-transition"
+              disabled={isPurchaseLoading}
+              className="w-full bg-primary text-primary-foreground py-4 rounded-full font-medium hover:bg-primary/90 boty-transition disabled:opacity-60"
             >
               Checkout
             </button>
@@ -187,6 +197,25 @@ export function CartDrawer() {
                 <p className="text-sm text-muted-foreground text-center">
                   Thank you for your purchase!
                 </p>
+              </div>
+            ) : purchaseError ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
+                  <Trash2 className="w-8 h-8 text-destructive" />
+                </div>
+                <h3 className="text-2xl font-serif text-foreground mb-2 text-center">
+                  Checkout failed
+                </h3>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  {purchaseError}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowPurchaseModal(false)}
+                  className="w-full bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 boty-transition"
+                >
+                  Back to cart
+                </button>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-8 animate-in fade-in duration-500">

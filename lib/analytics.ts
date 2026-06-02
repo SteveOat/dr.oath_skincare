@@ -54,24 +54,26 @@ export async function initSession() {
   
   try {
     // Check if session exists
-    const { data: existingSession } = await supabase
+    const { data: existingSession, error: sessionLookupError } = await supabase
       .from("analytics_sessions")
       .select("id")
       .eq("session_id", sessionId)
       .single()
+
+    if (sessionLookupError && sessionLookupError.code !== "PGRST116") {
+      throw sessionLookupError
+    }
     
     if (existingSession) {
       // Update last seen
-      await supabase
+      const { error } = await supabase
         .from("analytics_sessions")
-        .update({ 
-          last_seen_at: new Date().toISOString(),
-          page_views: existingSession.id ? undefined : 1 // increment handled separately
-        })
+        .update({ last_seen_at: new Date().toISOString() })
         .eq("session_id", sessionId)
+      if (error) throw error
     } else {
       // Create new session
-      await supabase.from("analytics_sessions").insert({
+      const { error } = await supabase.from("analytics_sessions").insert({
         session_id: sessionId,
         user_agent: deviceInfo.userAgent,
         referrer: document.referrer || null,
@@ -79,6 +81,7 @@ export async function initSession() {
         browser: deviceInfo.browser,
         os: deviceInfo.os,
       })
+      if (error) throw error
     }
   } catch (error) {
     console.error("[Analytics] Failed to init session:", error)
@@ -94,12 +97,13 @@ export async function trackPageView(pagePath?: string, pageTitle?: string) {
   if (!sessionId) return
   
   try {
-    await supabase.from("analytics_page_views").insert({
+    const { error } = await supabase.from("analytics_page_views").insert({
       session_id: sessionId,
       page_path: pagePath || window.location.pathname,
       page_title: pageTitle || document.title,
       referrer: document.referrer || null,
     })
+    if (error) throw error
     
     // Increment session page views; this RPC is optional in some deployments.
     await supabase.rpc("increment_page_views", { sid: sessionId })
@@ -122,7 +126,7 @@ export async function trackProductView(product: {
   if (!sessionId) return
   
   try {
-    await supabase.from("analytics_product_views").insert({
+    const { error } = await supabase.from("analytics_product_views").insert({
       session_id: sessionId,
       product_id: product.id,
       product_name: product.name,
@@ -130,6 +134,7 @@ export async function trackProductView(product: {
       product_category: product.category || null,
       source_page: window.location.pathname,
     })
+    if (error) throw error
   } catch (error) {
     console.error("[Analytics] Failed to track product view:", error)
   }
@@ -153,7 +158,7 @@ export async function trackCartEvent(
   if (!sessionId) return
   
   try {
-    await supabase.from("analytics_cart_events").insert({
+    const { error } = await supabase.from("analytics_cart_events").insert({
       session_id: sessionId,
       event_type: eventType,
       product_id: product.id,
@@ -162,6 +167,7 @@ export async function trackCartEvent(
       quantity,
       cart_total: cartTotal,
     })
+    if (error) throw error
   } catch (error) {
     console.error("[Analytics] Failed to track cart event:", error)
   }
@@ -177,21 +183,33 @@ export async function trackPurchase(
     quantity: number
   }>
 ) {
-  const supabase = createClient()
-  if (!supabase) return
   const sessionId = getSessionId()
   
-  if (!sessionId) return
+  if (!sessionId) return { ok: false, error: "Missing analytics session" }
   
   try {
-    await supabase.from("analytics_purchases").insert({
-      session_id: sessionId,
-      order_total: orderTotal,
-      item_count: items.reduce((sum, item) => sum + item.quantity, 0),
-      items: items,
+    const response = await fetch("/api/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        orderTotal,
+        items,
+      }),
     })
+
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(data?.error || "Checkout failed")
+    }
+
+    return { ok: true, data }
   } catch (error) {
     console.error("[Analytics] Failed to track purchase:", error)
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Checkout failed",
+    }
   }
 }
 
@@ -272,7 +290,7 @@ export async function captureAdAttribution() {
   const supabase = createClient()
   if (!supabase) return
   try {
-    await supabase.from("analytics_ad_clicks").insert({
+    const { error } = await supabase.from("analytics_ad_clicks").insert({
       session_id: sessionId,
       platform,
       utm_source,
@@ -286,6 +304,7 @@ export async function captureAdAttribution() {
       referrer,
       query_string: window.location.search || null,
     })
+    if (error) throw error
   } catch (error) {
     console.error("[Analytics] Failed to capture ad attribution:", error)
   }
@@ -304,13 +323,14 @@ export async function trackClick(
   if (!sessionId) return
   
   try {
-    await supabase.from("analytics_clicks").insert({
+    const { error } = await supabase.from("analytics_clicks").insert({
       session_id: sessionId,
       element_type: elementType,
       element_text: elementText || null,
       element_id: elementId || null,
       page_path: window.location.pathname,
     })
+    if (error) throw error
   } catch (error) {
     console.error("[Analytics] Failed to track click:", error)
   }
