@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/market-research",
-      "schedule": "0 * * * *"
+      "schedule": "0 1 * * *"
     }
   ]
 }
